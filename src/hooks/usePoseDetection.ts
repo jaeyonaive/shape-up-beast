@@ -75,9 +75,15 @@ export function usePoseDetection() {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
 
-        if (results.poseLandmarks) {
-          setLandmarks(results.poseLandmarks);
+        if (results.poseLandmarks && results.poseLandmarks.length > 0) {
+          console.log('[FitMon] Pose detected!', results.poseLandmarks.length, 'landmarks');
+          setLandmarks([...results.poseLandmarks]);
           drawPose(ctx, results.poseLandmarks, canvas.width, canvas.height);
+        } else {
+          console.log('[FitMon] No pose landmarks in frame');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          setLandmarks(null);
+        }
         } else {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           setLandmarks(null);

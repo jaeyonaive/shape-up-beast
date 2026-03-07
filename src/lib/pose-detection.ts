@@ -1,6 +1,3 @@
-// Pose detection utilities using MediaPipe via CDN
-// We use the drawing_utils and pose_landmarker from MediaPipe Tasks Vision
-
 export interface Landmark {
   x: number;
   y: number;
@@ -12,7 +9,6 @@ export interface PoseResult {
   landmarks: Landmark[];
 }
 
-// Key landmark indices from MediaPipe Pose
 export const POSE = {
   NOSE: 0,
   LEFT_SHOULDER: 11,
@@ -44,7 +40,6 @@ export function getMidpoint(a: Landmark, b: Landmark): Landmark {
   };
 }
 
-// Squat detection state machine
 export type SquatPhase = 'standing' | 'going_down' | 'at_bottom' | 'going_up';
 
 export interface SquatState {
@@ -53,6 +48,8 @@ export interface SquatState {
   feedback: string;
   formQuality: 'good' | 'needs_work' | 'neutral';
 }
+
+let lastLogTime = 0;
 
 export function detectSquat(
   landmarks: Landmark[],
@@ -67,55 +64,73 @@ export function detectSquat(
   const leftShoulder = landmarks[POSE.LEFT_SHOULDER];
   const rightShoulder = landmarks[POSE.RIGHT_SHOULDER];
 
-  if (!leftHip || !rightHip || !leftKnee || !rightKnee || !leftAnkle || !rightAnkle) {
-    return { ...prevState, feedback: 'Stand where the camera can see you', formQuality: 'neutral' };
+  // Check visibility - be lenient
+  const minVis = 0.3;
+  const keyParts = [leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle];
+  const visibleCount = keyParts.filter(p => p && (p.visibility ?? 1) > minVis).length;
+
+  if (visibleCount < 4) {
+    const now = Date.now();
+    if (now - lastLogTime > 2000) {
+      console.log('[FitMon] Low visibility - only', visibleCount, '/6 key points visible');
+      lastLogTime = now;
+    }
+    return { ...prevState, feedback: '📷 Move back so camera sees your full body', formQuality: 'neutral' };
   }
 
-  // Calculate knee angles (both sides)
-  const leftKneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
-  const rightKneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
-  const avgKneeAngle = (leftKneeAngle + rightKneeAngle) / 2;
+  // Use the side with better visibility
+  const leftVis = (leftHip?.visibility ?? 0) + (leftKnee?.visibility ?? 0) + (leftAnkle?.visibility ?? 0);
+  const rightVis = (rightHip?.visibility ?? 0) + (rightKnee?.visibility ?? 0) + (rightAnkle?.visibility ?? 0);
 
-  // Calculate hip angle for depth check
-  const midShoulder = getMidpoint(leftShoulder, rightShoulder);
-  const midHip = getMidpoint(leftHip, rightHip);
-  const midKnee = getMidpoint(leftKnee, rightKnee);
-  const hipAngle = calculateAngle(midShoulder, midHip, midKnee);
+  let kneeAngle: number;
+  if (leftVis > rightVis) {
+    kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+  } else {
+    kneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+  }
+
+  // Debug logging (throttled)
+  const now = Date.now();
+  if (now - lastLogTime > 500) {
+    console.log(`[FitMon] Knee angle: ${kneeAngle.toFixed(1)}° | Phase: ${prevState.phase} | Reps: ${prevState.repCount}`);
+    lastLogTime = now;
+  }
 
   const newState = { ...prevState };
 
-  // Thresholds
-  const STANDING_ANGLE = 160;
-  const SQUAT_ANGLE = 110;
-  const DEEP_SQUAT_ANGLE = 90;
+  // More forgiving thresholds
+  const STANDING_ANGLE = 150; // was 160 - more forgiving
+  const SQUAT_ANGLE = 120;    // was 110 - easier to trigger
+  const DEEP_SQUAT_ANGLE = 100; // was 90 - more forgiving
 
-  if (avgKneeAngle > STANDING_ANGLE) {
+  if (kneeAngle > STANDING_ANGLE) {
     // Standing position
     if (prevState.phase === 'going_up' || prevState.phase === 'at_bottom') {
       // Completed a rep!
       newState.repCount = prevState.repCount + 1;
       newState.feedback = '🎉 Great rep!';
       newState.formQuality = 'good';
+      console.log(`[FitMon] ✅ REP COUNTED! Total: ${newState.repCount}`);
     } else {
       newState.feedback = 'Start squatting down!';
       newState.formQuality = 'neutral';
     }
     newState.phase = 'standing';
-  } else if (avgKneeAngle < DEEP_SQUAT_ANGLE) {
+  } else if (kneeAngle < DEEP_SQUAT_ANGLE) {
     newState.phase = 'at_bottom';
     newState.feedback = '✅ Good depth! Come back up!';
     newState.formQuality = 'good';
-  } else if (avgKneeAngle < SQUAT_ANGLE) {
+  } else if (kneeAngle < SQUAT_ANGLE) {
     if (prevState.phase === 'standing' || prevState.phase === 'going_down') {
       newState.phase = 'at_bottom';
-      newState.feedback = 'Go a bit deeper!';
-      newState.formQuality = 'needs_work';
+      newState.feedback = 'Good! Now stand back up!';
+      newState.formQuality = 'good';
     } else {
       newState.phase = 'going_up';
       newState.feedback = 'Push back up!';
       newState.formQuality = 'good';
     }
-  } else if (avgKneeAngle < STANDING_ANGLE) {
+  } else if (kneeAngle < STANDING_ANGLE) {
     if (prevState.phase === 'standing') {
       newState.phase = 'going_down';
       newState.feedback = 'Keep going down!';
@@ -130,7 +145,6 @@ export function detectSquat(
   return newState;
 }
 
-// Draw pose skeleton on canvas
 export function drawPose(
   ctx: CanvasRenderingContext2D,
   landmarks: Landmark[],
@@ -139,7 +153,6 @@ export function drawPose(
 ) {
   ctx.clearRect(0, 0, width, height);
 
-  // Connections to draw
   const connections = [
     [POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER],
     [POSE.LEFT_SHOULDER, POSE.LEFT_ELBOW],
@@ -155,7 +168,6 @@ export function drawPose(
     [POSE.RIGHT_KNEE, POSE.RIGHT_ANKLE],
   ];
 
-  // Draw connections
   ctx.strokeStyle = 'hsl(200, 85%, 55%)';
   ctx.lineWidth = 4;
   ctx.lineCap = 'round';
@@ -163,7 +175,7 @@ export function drawPose(
   for (const [startIdx, endIdx] of connections) {
     const start = landmarks[startIdx];
     const end = landmarks[endIdx];
-    if (start && end && (start.visibility ?? 1) > 0.5 && (end.visibility ?? 1) > 0.5) {
+    if (start && end && (start.visibility ?? 1) > 0.3 && (end.visibility ?? 1) > 0.3) {
       ctx.beginPath();
       ctx.moveTo(start.x * width, start.y * height);
       ctx.lineTo(end.x * width, end.y * height);
@@ -171,11 +183,10 @@ export function drawPose(
     }
   }
 
-  // Draw landmarks
   const keyPoints = Object.values(POSE);
   for (const idx of keyPoints) {
     const lm = landmarks[idx];
-    if (lm && (lm.visibility ?? 1) > 0.5) {
+    if (lm && (lm.visibility ?? 1) > 0.3) {
       ctx.beginPath();
       ctx.arc(lm.x * width, lm.y * height, 6, 0, 2 * Math.PI);
       ctx.fillStyle = 'hsl(145, 80%, 50%)';
