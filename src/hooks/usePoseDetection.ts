@@ -18,7 +18,6 @@ export function usePoseDetection() {
       'https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js',
       'https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js',
     ];
-
     for (const src of scripts) {
       if (document.querySelector(`script[src="${src}"]`)) continue;
       await new Promise<void>((resolve, reject) => {
@@ -36,7 +35,7 @@ export function usePoseDetection() {
       setIsLoading(true);
       setError(null);
 
-      // CRITICAL: getUserMedia called directly in click handler context
+      // CRITICAL: getUserMedia directly in click handler
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
@@ -52,9 +51,11 @@ export function usePoseDetection() {
 
       video.srcObject = stream;
       await video.play();
+      console.log('[FitMon] Camera started, video size:', video.videoWidth, 'x', video.videoHeight);
 
-      // Now load MediaPipe (after camera is already running)
+      // Load MediaPipe after camera is running
       await loadScripts();
+      console.log('[FitMon] MediaPipe scripts loaded');
 
       const pose = new (window as any).Pose({
         locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
@@ -76,21 +77,17 @@ export function usePoseDetection() {
         canvas.height = video.videoHeight;
 
         if (results.poseLandmarks && results.poseLandmarks.length > 0) {
-          console.log('[FitMon] Pose detected!', results.poseLandmarks.length, 'landmarks');
           setLandmarks([...results.poseLandmarks]);
           drawPose(ctx, results.poseLandmarks, canvas.width, canvas.height);
         } else {
-          console.log('[FitMon] No pose landmarks in frame');
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          setLandmarks(null);
-        }
-        } else {
+          console.log('[FitMon] No pose detected in frame');
           ctx.clearRect(0, 0, canvas.width, canvas.height);
           setLandmarks(null);
         }
       });
 
       await pose.initialize();
+      console.log('[FitMon] Pose model initialized');
       poseRef.current = pose;
       activeRef.current = true;
       setCameraActive(true);
@@ -98,14 +95,15 @@ export function usePoseDetection() {
 
       // Detection loop
       const processFrame = async () => {
-        if (!activeRef.current || !poseRef.current || !video || video.readyState < 2) {
-          if (activeRef.current) rafRef.current = requestAnimationFrame(processFrame);
+        if (!activeRef.current || !poseRef.current) return;
+        if (!video || video.readyState < 2) {
+          rafRef.current = requestAnimationFrame(processFrame);
           return;
         }
         try {
           await poseRef.current.send({ image: video });
         } catch (e) {
-          // ignore frame errors
+          console.warn('[FitMon] Frame processing error:', e);
         }
         if (activeRef.current) {
           rafRef.current = requestAnimationFrame(processFrame);
@@ -114,9 +112,9 @@ export function usePoseDetection() {
       rafRef.current = requestAnimationFrame(processFrame);
 
     } catch (err: any) {
-      console.error('Camera/Pose error:', err);
+      console.error('[FitMon] Camera/Pose error:', err);
       if (err.name === 'NotAllowedError') {
-        setError('Camera permission denied. Please allow camera access in your browser settings.');
+        setError('Camera permission denied. Please allow camera access.');
       } else {
         setError(err.message || 'Failed to start camera');
       }
@@ -146,19 +144,8 @@ export function usePoseDetection() {
   }, []);
 
   useEffect(() => {
-    return () => {
-      stopCamera();
-    };
+    return () => { stopCamera(); };
   }, [stopCamera]);
 
-  return {
-    videoRef,
-    canvasRef,
-    landmarks,
-    isLoading,
-    error,
-    cameraActive,
-    startCamera,
-    stopCamera,
-  };
+  return { videoRef, canvasRef, landmarks, isLoading, error, cameraActive, startCamera, stopCamera };
 }
