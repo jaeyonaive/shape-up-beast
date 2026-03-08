@@ -104,7 +104,7 @@ export default function Battle() {
   if (!started) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-        <MonsterDisplay imageKey={monster.image} isHit={false} />
+        <img src={monsterImages[monster.image]} alt={monster.name} className="w-56 h-56 object-contain drop-shadow-2xl monster-float" />
         <div className="relative z-20 mt-64 text-center">
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">{monster.name}</h2>
           <p className="font-body text-sm text-muted-foreground mb-2">
