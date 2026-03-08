@@ -4,10 +4,17 @@ import { usePoseDetection } from '@/hooks/usePoseDetection';
 import { detectSquat, type SquatState } from '@/lib/pose-detection';
 import { MONSTERS, loadGameState, saveGameState } from '@/lib/game-data';
 import { HPBar } from '@/components/game/HPBar';
-import { GameHUD } from '@/components/game/GameHUD';
-import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { CameraView } from '@/components/game/CameraView';
 import { Button } from '@/components/ui/button';
+import battleBg from '@/assets/battle-bg.jpg';
+import coinImg from '@/assets/coin.png';
+import monsterTutorial from '@/assets/monster-tutorial.png';
+import monsterBoss from '@/assets/monster-boss.png';
+
+const monsterImages: Record<string, string> = {
+  'monster-tutorial': monsterTutorial,
+  'monster-boss': monsterBoss,
+};
 
 export default function Battle() {
   const { monsterId } = useParams();
@@ -97,7 +104,7 @@ export default function Battle() {
   if (!started) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-        <MonsterDisplay imageKey={monster.image} isHit={false} />
+        <img src={monsterImages[monster.image]} alt={monster.name} className="w-56 h-56 object-contain drop-shadow-2xl monster-float" />
         <div className="relative z-20 mt-64 text-center">
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">{monster.name}</h2>
           <p className="font-body text-sm text-muted-foreground mb-2">
@@ -173,62 +180,120 @@ export default function Battle() {
   }
 
   return (
-    <div className="h-screen w-screen relative overflow-hidden">
-      {/* Camera feed + skeleton overlay */}
-      <CameraView videoRef={videoRef} canvasRef={canvasRef} />
+    <div className="h-screen w-screen relative overflow-hidden flex flex-col">
+      {/* Top half: Monster + background + HUD */}
+      <div className="relative flex-1 min-h-0" style={{ flex: '1 1 55%' }}>
+        {/* Battle background */}
+        <img
+          src={battleBg}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+        />
 
-      {/* Loading overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80">
-          <div className="text-center">
-            <div className="text-4xl mb-4 animate-spin">⏳</div>
-            <p className="font-pixel text-xs text-foreground">Loading camera...</p>
+        {/* HP Bar */}
+        <div className="absolute top-4 left-3 right-3 z-20">
+          <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+        </div>
+
+        {/* Monster - centered in top half */}
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <img
+            src={monsterImages[monster.image]}
+            alt="Monster"
+            className={`w-64 h-64 object-contain drop-shadow-2xl ${
+              isHit ? 'monster-hit' : 'monster-float'
+            }`}
+          />
+        </div>
+
+        {/* Left side HUD - timer, streak */}
+        <div className="absolute top-28 left-3 flex flex-col gap-2 z-20">
+          <div className="flex items-center gap-1.5">
+            <div className="w-8 h-8 rounded-full bg-game-timer flex items-center justify-center">
+              <span className="font-pixel text-[8px] text-foreground">⏱</span>
+            </div>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{timeLeft}s</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-2xl">🔥</span>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span>
           </div>
         </div>
-      )}
 
-      {/* Error overlay */}
-      {error && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/90">
-          <div className="text-center px-4">
-            <div className="text-4xl mb-4">❌</div>
-            <p className="font-pixel text-xs text-destructive mb-2">Camera Error</p>
-            <p className="font-body text-sm text-muted-foreground mb-4">{error}</p>
-            <Button onClick={handleStart} className="bg-primary text-primary-foreground">
-              Retry
-            </Button>
+        {/* AR button placeholder - right side */}
+        <div className="absolute top-1/2 right-3 -translate-y-1/2 z-20">
+          <div className="w-10 h-10 rounded-full bg-foreground/80 flex items-center justify-center">
+            <span className="font-pixel text-[6px] text-background">AR</span>
           </div>
         </div>
-      )}
 
-      {/* HP Bar */}
-      <div className="absolute top-4 left-3 right-3 z-20">
-        <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+        {/* Coins - bottom left of top half */}
+        <div className="absolute bottom-3 left-3 flex items-center gap-1.5 z-20">
+          <img src={coinImg} alt="coins" className="w-8 h-8" />
+          <span className="font-pixel text-sm text-game-gold game-text-shadow">{coins}G</span>
+        </div>
+
+        {/* Back button */}
+        <button
+          onClick={() => {
+            stopCamera();
+            navigate('/');
+          }}
+          className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
+        >
+          <span className="text-foreground text-lg">✕</span>
+        </button>
       </div>
 
-      {/* Monster */}
-      <MonsterDisplay imageKey={monster.image} isHit={isHit} />
+      {/* Bottom half: Camera feed */}
+      <div className="relative" style={{ flex: '1 1 45%' }}>
+        <CameraView videoRef={videoRef} canvasRef={canvasRef} />
 
-      {/* HUD */}
-      <GameHUD
-        timeLeft={timeLeft}
-        streak={streak}
-        coins={coins}
-        reps={displayState.repCount}
-        feedback={displayState.feedback}
-        formQuality={displayState.formQuality}
-      />
+        {/* Feedback overlay on camera */}
+        {displayState.feedback && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+            <div className={`game-panel px-4 py-2`} style={
+              displayState.formQuality === 'good' ? { borderColor: 'hsl(var(--game-success))' } :
+              displayState.formQuality === 'needs_work' ? { borderColor: 'hsl(var(--game-warning))' } :
+              {}
+            }>
+              <p className="font-body text-sm font-semibold text-foreground text-center game-text-shadow">
+                {displayState.feedback}
+              </p>
+            </div>
+          </div>
+        )}
 
-      {/* Back button */}
-      <button
-        onClick={() => {
-          stopCamera();
-          navigate('/');
-        }}
-        className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
-      >
-        <span className="text-foreground text-lg">✕</span>
-      </button>
+        {/* Reps counter overlay */}
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
+          <span className="text-2xl">💪</span>
+          <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
+        </div>
+
+        {/* Loading overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80">
+            <div className="text-center">
+              <div className="text-4xl mb-4 animate-spin">⏳</div>
+              <p className="font-pixel text-xs text-foreground">Loading camera...</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error overlay */}
+        {error && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/90">
+            <div className="text-center px-4">
+              <div className="text-4xl mb-4">❌</div>
+              <p className="font-pixel text-xs text-destructive mb-2">Camera Error</p>
+              <p className="font-body text-sm text-muted-foreground mb-4">{error}</p>
+              <Button onClick={handleStart} className="bg-primary text-primary-foreground">
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
