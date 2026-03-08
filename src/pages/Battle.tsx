@@ -4,10 +4,17 @@ import { usePoseDetection } from '@/hooks/usePoseDetection';
 import { detectSquat, type SquatState } from '@/lib/pose-detection';
 import { MONSTERS, loadGameState, saveGameState } from '@/lib/game-data';
 import { HPBar } from '@/components/game/HPBar';
-import { GameHUD } from '@/components/game/GameHUD';
-import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { CameraView } from '@/components/game/CameraView';
 import { Button } from '@/components/ui/button';
+import battleBg from '@/assets/battle-bg.jpg';
+import coinImg from '@/assets/coin.png';
+import monsterTutorial from '@/assets/monster-tutorial.png';
+import monsterBoss from '@/assets/monster-boss.png';
+
+const monsterImages: Record<string, string> = {
+  'monster-tutorial': monsterTutorial,
+  'monster-boss': monsterBoss,
+};
 
 export default function Battle() {
   const { monsterId } = useParams();
