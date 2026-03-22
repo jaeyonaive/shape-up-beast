@@ -55,13 +55,6 @@ export interface SquatState {
 
 let lastLogTime = 0;
 
-// Smooth angle using a rolling average of the last N frames
-function smoothAngle(buffer: number[], newAngle: number, windowSize = 3): { smoothed: number; buffer: number[] } {
-  const updated = [...buffer, newAngle].slice(-windowSize);
-  const smoothed = updated.reduce((a, b) => a + b, 0) / updated.length;
-  return { smoothed, buffer: updated };
-}
-
 export function detectSquat(
   landmarks: Landmark[],
   prevState: SquatState
@@ -88,18 +81,13 @@ export function detectSquat(
   const leftAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
   const rightAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
 
-  let rawAngle: number;
+  let kneeAngle: number;
   const totalVis = leftVis + rightVis;
   if (totalVis > 0) {
-    rawAngle = (leftAngle * leftVis + rightAngle * rightVis) / totalVis;
+    kneeAngle = (leftAngle * leftVis + rightAngle * rightVis) / totalVis;
   } else {
-    rawAngle = (leftAngle + rightAngle) / 2;
+    kneeAngle = (leftAngle + rightAngle) / 2;
   }
-
-  // Apply temporal smoothing (3-frame moving average)
-  const { smoothed: kneeAngle, buffer: newBuffer } = smoothAngle(
-    prevState._angleBuffer || [], rawAngle, 3
-  );
 
   // Form validation: check hip angle to reject forward bends
   let isValidSquatForm = true;
@@ -107,7 +95,6 @@ export function detectSquat(
     const leftHipAngle = calculateAngle(leftShoulder, leftHip, leftKnee);
     const rightHipAngle = calculateAngle(rightShoulder, rightHip, rightKnee);
     const hipAngle = (leftHipAngle + rightHipAngle) / 2;
-    // If hip angle is too small (<60°), user is bending forward, not squatting
     if (hipAngle < 60) {
       isValidSquatForm = false;
     }
@@ -116,14 +103,11 @@ export function detectSquat(
   // Debug logging (throttled)
   const now = Date.now();
   if (now - lastLogTime > 500) {
-    console.log(`[FitMon] Knee: ${kneeAngle.toFixed(1)}° (raw: ${rawAngle.toFixed(1)}°) | Phase: ${prevState.phase} | Reps: ${prevState.repCount} | Valid: ${isValidSquatForm}`);
+    console.log(`[FitMon] Knee: ${kneeAngle.toFixed(1)}° | Phase: ${prevState.phase} | Reps: ${prevState.repCount} | Valid: ${isValidSquatForm}`);
     lastLogTime = now;
   }
 
-  const newState: SquatState = { 
-    ...prevState, 
-    _angleBuffer: newBuffer,
-  };
+  const newState: SquatState = { ...prevState };
 
   // Hysteresis thresholds: different for going down vs coming up
   const STANDING_UP = 150;    // must reach this to count as standing
