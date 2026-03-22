@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { type Landmark, drawPose } from '@/lib/pose-detection';
-import { PoseLandmarker, FilesetResolver, DrawingUtils } from '@mediapipe/tasks-vision';
+// @ts-ignore - mediapipe tasks-vision types
+import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 export function usePoseDetection() {
   const videoRef = useRef<HTMLVideoElement>(null);
