@@ -7,10 +7,10 @@ interface CameraViewProps {
 
 export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
   return (
-    <div className="absolute inset-0 z-0">
+    <div className="absolute inset-0 z-0 bg-black">
       <video
         ref={videoRef}
-        className="w-full h-full object-cover mirror"
+        className="w-full h-full object-contain mirror"
         autoPlay
         playsInline
         muted
@@ -18,7 +18,7 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
       />
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-contain"
         style={{ transform: 'scaleX(-1)' }}
       />
       {/* Dark overlay for readability */}
