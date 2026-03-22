@@ -38,6 +38,7 @@ export default function Battle() {
     repCount: 0,
     feedback: 'Get ready!',
     formQuality: 'neutral',
+    _lastRepTime: 0,
   });
   const [displayState, setDisplayState] = useState<SquatState>(squatStateRef.current);
   const prevRepRef = useRef(0);
