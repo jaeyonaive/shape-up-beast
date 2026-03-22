@@ -174,7 +174,7 @@ export function drawPose(
   for (const [startIdx, endIdx] of connections) {
     const start = landmarks[startIdx];
     const end = landmarks[endIdx];
-    if (start && end && (start.visibility ?? 1) > 0.3 && (end.visibility ?? 1) > 0.3) {
+    if (start && end) {
       ctx.beginPath();
       ctx.moveTo(start.x * width, start.y * height);
       ctx.lineTo(end.x * width, end.y * height);
