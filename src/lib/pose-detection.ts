@@ -96,9 +96,9 @@ export function detectSquat(
     rawAngle = (leftAngle + rightAngle) / 2;
   }
 
-  // Apply temporal smoothing (5-frame moving average)
+  // Apply temporal smoothing (3-frame moving average)
   const { smoothed: kneeAngle, buffer: newBuffer } = smoothAngle(
-    prevState._angleBuffer || [], rawAngle, 5
+    prevState._angleBuffer || [], rawAngle, 3
   );
 
   // Form validation: check hip angle to reject forward bends
