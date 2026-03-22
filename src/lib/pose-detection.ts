@@ -61,29 +61,28 @@ export function detectSquat(
   const rightKnee = landmarks[POSE.RIGHT_KNEE];
   const leftAnkle = landmarks[POSE.LEFT_ANKLE];
   const rightAnkle = landmarks[POSE.RIGHT_ANKLE];
-  const leftShoulder = landmarks[POSE.LEFT_SHOULDER];
-  const rightShoulder = landmarks[POSE.RIGHT_SHOULDER];
 
-  // Check visibility - be lenient
-  const minVis = 0.3;
+  // The new Tasks Vision API always returns all 33 landmarks if a pose is detected.
+  // Visibility can be very low or 0 for occluded joints but coordinates are still estimated.
+  // So we just check that landmarks exist (they always will if pose was detected).
   const keyParts = [leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle];
-  const visibleCount = keyParts.filter(p => p && (p.visibility ?? 1) > minVis).length;
+  const allExist = keyParts.every(p => p != null);
 
-  if (visibleCount < 4) {
+  if (!allExist) {
     const now = Date.now();
     if (now - lastLogTime > 2000) {
-      console.log('[FitMon] Low visibility - only', visibleCount, '/6 key points visible');
+      console.log('[FitMon] Missing key landmarks');
       lastLogTime = now;
     }
     return { ...prevState, feedback: '📷 Move back so camera sees your full body', formQuality: 'neutral' };
   }
 
-  // Use the side with better visibility
+  // Use the side with better visibility (fall back to averaging both sides)
   const leftVis = (leftHip?.visibility ?? 0) + (leftKnee?.visibility ?? 0) + (leftAnkle?.visibility ?? 0);
   const rightVis = (rightHip?.visibility ?? 0) + (rightKnee?.visibility ?? 0) + (rightAnkle?.visibility ?? 0);
 
   let kneeAngle: number;
-  if (leftVis > rightVis) {
+  if (leftVis >= rightVis) {
     kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
   } else {
     kneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
@@ -92,7 +91,7 @@ export function detectSquat(
   // Debug logging (throttled)
   const now = Date.now();
   if (now - lastLogTime > 500) {
-    console.log(`[FitMon] Knee angle: ${kneeAngle.toFixed(1)}° | Phase: ${prevState.phase} | Reps: ${prevState.repCount}`);
+    console.log(`[FitMon] Knee angle: ${kneeAngle.toFixed(1)}° | Phase: ${prevState.phase} | Reps: ${prevState.repCount} | Vis L:${leftVis.toFixed(2)} R:${rightVis.toFixed(2)}`);
     lastLogTime = now;
   }
 
@@ -175,7 +174,7 @@ export function drawPose(
   for (const [startIdx, endIdx] of connections) {
     const start = landmarks[startIdx];
     const end = landmarks[endIdx];
-    if (start && end && (start.visibility ?? 1) > 0.3 && (end.visibility ?? 1) > 0.3) {
+    if (start && end) {
       ctx.beginPath();
       ctx.moveTo(start.x * width, start.y * height);
       ctx.lineTo(end.x * width, end.y * height);
@@ -186,7 +185,7 @@ export function drawPose(
   const keyPoints = Object.values(POSE);
   for (const idx of keyPoints) {
     const lm = landmarks[idx];
-    if (lm && (lm.visibility ?? 1) > 0.3) {
+    if (lm) {
       ctx.beginPath();
       ctx.arc(lm.x * width, lm.y * height, 6, 0, 2 * Math.PI);
       ctx.fillStyle = 'hsl(145, 80%, 50%)';
