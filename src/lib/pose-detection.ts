@@ -126,17 +126,17 @@ export function detectSquat(
   };
 
   // Hysteresis thresholds: different for going down vs coming up
-  const STANDING_UP = 155;    // must reach this to count as standing (coming up)
-  const STANDING_DOWN = 145;  // start going_down below this
-  const SQUAT_ENTER = 120;   // enter squat zone going down
-  const SQUAT_EXIT = 130;    // exit squat zone going up (hysteresis)
-  const DEEP_SQUAT = 100;
+  const STANDING_UP = 150;    // must reach this to count as standing
+  const STANDING_DOWN = 140;  // start going_down below this
+  const SQUAT_ENTER = 115;   // enter squat zone going down
+  const SQUAT_EXIT = 125;    // exit squat zone going up (hysteresis)
+  const DEEP_SQUAT = 95;
 
   // Minimum rep duration: prevent noise-induced false reps
-  const MIN_REP_INTERVAL_MS = 800;
+  const MIN_REP_INTERVAL_MS = 600;
   const timeSinceLastRep = now - (prevState._lastRepTime || 0);
 
-  if (kneeAngle > STANDING_UP) {
+  if (kneeAngle >= STANDING_UP) {
     // Standing position
     if ((prevState.phase === 'going_up' || prevState.phase === 'at_bottom') && timeSinceLastRep > MIN_REP_INTERVAL_MS) {
       newState.repCount = prevState.repCount + 1;
