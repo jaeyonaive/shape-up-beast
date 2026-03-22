@@ -56,7 +56,7 @@ export interface SquatState {
 let lastLogTime = 0;
 
 // Smooth angle using a rolling average of the last N frames
-function smoothAngle(buffer: number[], newAngle: number, windowSize = 5): { smoothed: number; buffer: number[] } {
+function smoothAngle(buffer: number[], newAngle: number, windowSize = 3): { smoothed: number; buffer: number[] } {
   const updated = [...buffer, newAngle].slice(-windowSize);
   const smoothed = updated.reduce((a, b) => a + b, 0) / updated.length;
   return { smoothed, buffer: updated };
