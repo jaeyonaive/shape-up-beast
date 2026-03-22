@@ -185,7 +185,7 @@ export function drawPose(
   const keyPoints = Object.values(POSE);
   for (const idx of keyPoints) {
     const lm = landmarks[idx];
-    if (lm && (lm.visibility ?? 1) > 0.3) {
+    if (lm) {
       ctx.beginPath();
       ctx.arc(lm.x * width, lm.y * height, 6, 0, 2 * Math.PI);
       ctx.fillStyle = 'hsl(145, 80%, 50%)';
