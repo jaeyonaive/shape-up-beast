@@ -23,7 +23,7 @@ export function usePoseDetection() {
 
       // Get camera first (must be in click handler for mobile)
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 640 } },
         audio: false,
       });
       streamRef.current = stream;
