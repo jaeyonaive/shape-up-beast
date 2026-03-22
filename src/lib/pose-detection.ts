@@ -47,9 +47,20 @@ export interface SquatState {
   repCount: number;
   feedback: string;
   formQuality: 'good' | 'needs_work' | 'neutral';
+  /** Internal: timestamp of last rep */
+  _lastRepTime?: number;
+  /** Internal: rolling angle buffer for smoothing */
+  _angleBuffer?: number[];
 }
 
 let lastLogTime = 0;
+
+// Smooth angle using a rolling average of the last N frames
+function smoothAngle(buffer: number[], newAngle: number, windowSize = 5): { smoothed: number; buffer: number[] } {
+  const updated = [...buffer, newAngle].slice(-windowSize);
+  const smoothed = updated.reduce((a, b) => a + b, 0) / updated.length;
+  return { smoothed, buffer: updated };
+}
 
 export function detectSquat(
   landmarks: Landmark[],
@@ -61,65 +72,88 @@ export function detectSquat(
   const rightKnee = landmarks[POSE.RIGHT_KNEE];
   const leftAnkle = landmarks[POSE.LEFT_ANKLE];
   const rightAnkle = landmarks[POSE.RIGHT_ANKLE];
+  const leftShoulder = landmarks[POSE.LEFT_SHOULDER];
+  const rightShoulder = landmarks[POSE.RIGHT_SHOULDER];
 
-  // The new Tasks Vision API always returns all 33 landmarks if a pose is detected.
-  // Visibility can be very low or 0 for occluded joints but coordinates are still estimated.
-  // So we just check that landmarks exist (they always will if pose was detected).
   const keyParts = [leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle];
   const allExist = keyParts.every(p => p != null);
 
   if (!allExist) {
-    const now = Date.now();
-    if (now - lastLogTime > 2000) {
-      console.log('[FitMon] Missing key landmarks');
-      lastLogTime = now;
-    }
     return { ...prevState, feedback: '📷 Move back so camera sees your full body', formQuality: 'neutral' };
   }
 
-  // Use the side with better visibility (fall back to averaging both sides)
+  // Weighted bilateral angle: use visibility-weighted average of both sides
   const leftVis = (leftHip?.visibility ?? 0) + (leftKnee?.visibility ?? 0) + (leftAnkle?.visibility ?? 0);
   const rightVis = (rightHip?.visibility ?? 0) + (rightKnee?.visibility ?? 0) + (rightAnkle?.visibility ?? 0);
+  const leftAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+  const rightAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
 
-  let kneeAngle: number;
-  if (leftVis >= rightVis) {
-    kneeAngle = calculateAngle(leftHip, leftKnee, leftAnkle);
+  let rawAngle: number;
+  const totalVis = leftVis + rightVis;
+  if (totalVis > 0) {
+    rawAngle = (leftAngle * leftVis + rightAngle * rightVis) / totalVis;
   } else {
-    kneeAngle = calculateAngle(rightHip, rightKnee, rightAnkle);
+    rawAngle = (leftAngle + rightAngle) / 2;
+  }
+
+  // Apply temporal smoothing (5-frame moving average)
+  const { smoothed: kneeAngle, buffer: newBuffer } = smoothAngle(
+    prevState._angleBuffer || [], rawAngle, 5
+  );
+
+  // Form validation: check hip angle to reject forward bends
+  let isValidSquatForm = true;
+  if (leftShoulder && rightShoulder && leftHip && rightHip && leftKnee && rightKnee) {
+    const leftHipAngle = calculateAngle(leftShoulder, leftHip, leftKnee);
+    const rightHipAngle = calculateAngle(rightShoulder, rightHip, rightKnee);
+    const hipAngle = (leftHipAngle + rightHipAngle) / 2;
+    // If hip angle is too small (<60°), user is bending forward, not squatting
+    if (hipAngle < 60) {
+      isValidSquatForm = false;
+    }
   }
 
   // Debug logging (throttled)
   const now = Date.now();
   if (now - lastLogTime > 500) {
-    console.log(`[FitMon] Knee angle: ${kneeAngle.toFixed(1)}° | Phase: ${prevState.phase} | Reps: ${prevState.repCount} | Vis L:${leftVis.toFixed(2)} R:${rightVis.toFixed(2)}`);
+    console.log(`[FitMon] Knee: ${kneeAngle.toFixed(1)}° (raw: ${rawAngle.toFixed(1)}°) | Phase: ${prevState.phase} | Reps: ${prevState.repCount} | Valid: ${isValidSquatForm}`);
     lastLogTime = now;
   }
 
-  const newState = { ...prevState };
+  const newState: SquatState = { 
+    ...prevState, 
+    _angleBuffer: newBuffer,
+  };
 
-  // More forgiving thresholds
-  const STANDING_ANGLE = 150; // was 160 - more forgiving
-  const SQUAT_ANGLE = 120;    // was 110 - easier to trigger
-  const DEEP_SQUAT_ANGLE = 100; // was 90 - more forgiving
+  // Hysteresis thresholds: different for going down vs coming up
+  const STANDING_UP = 155;    // must reach this to count as standing (coming up)
+  const STANDING_DOWN = 145;  // start going_down below this
+  const SQUAT_ENTER = 120;   // enter squat zone going down
+  const SQUAT_EXIT = 130;    // exit squat zone going up (hysteresis)
+  const DEEP_SQUAT = 100;
 
-  if (kneeAngle > STANDING_ANGLE) {
+  // Minimum rep duration: prevent noise-induced false reps
+  const MIN_REP_INTERVAL_MS = 800;
+  const timeSinceLastRep = now - (prevState._lastRepTime || 0);
+
+  if (kneeAngle > STANDING_UP) {
     // Standing position
-    if (prevState.phase === 'going_up' || prevState.phase === 'at_bottom') {
-      // Completed a rep!
+    if ((prevState.phase === 'going_up' || prevState.phase === 'at_bottom') && timeSinceLastRep > MIN_REP_INTERVAL_MS) {
       newState.repCount = prevState.repCount + 1;
+      newState._lastRepTime = now;
       newState.feedback = '🎉 Great rep!';
       newState.formQuality = 'good';
       console.log(`[FitMon] ✅ REP COUNTED! Total: ${newState.repCount}`);
-    } else {
+    } else if (prevState.phase === 'standing' || prevState.phase === 'going_down') {
       newState.feedback = 'Start squatting down!';
       newState.formQuality = 'neutral';
     }
     newState.phase = 'standing';
-  } else if (kneeAngle < DEEP_SQUAT_ANGLE) {
+  } else if (kneeAngle < DEEP_SQUAT && isValidSquatForm) {
     newState.phase = 'at_bottom';
     newState.feedback = '✅ Good depth! Come back up!';
     newState.formQuality = 'good';
-  } else if (kneeAngle < SQUAT_ANGLE) {
+  } else if (kneeAngle < SQUAT_ENTER && isValidSquatForm) {
     if (prevState.phase === 'standing' || prevState.phase === 'going_down') {
       newState.phase = 'at_bottom';
       newState.feedback = 'Good! Now stand back up!';
@@ -129,16 +163,23 @@ export function detectSquat(
       newState.feedback = 'Push back up!';
       newState.formQuality = 'good';
     }
-  } else if (kneeAngle < STANDING_ANGLE) {
+  } else if (kneeAngle < STANDING_DOWN) {
     if (prevState.phase === 'standing') {
       newState.phase = 'going_down';
-      newState.feedback = 'Keep going down!';
-      newState.formQuality = 'neutral';
-    } else if (prevState.phase === 'at_bottom') {
+      newState.feedback = isValidSquatForm ? 'Keep going down!' : '⚠️ Keep your back straight!';
+      newState.formQuality = isValidSquatForm ? 'neutral' : 'needs_work';
+    } else if (prevState.phase === 'at_bottom' && kneeAngle > SQUAT_EXIT) {
       newState.phase = 'going_up';
       newState.feedback = 'Good, push up!';
       newState.formQuality = 'good';
     }
+    // going_down stays going_down in this range (no stuck state)
+    // going_up stays going_up in this range
+  }
+
+  if (!isValidSquatForm && kneeAngle < STANDING_DOWN) {
+    newState.feedback = '⚠️ Keep your back straight — don\'t bend forward!';
+    newState.formQuality = 'needs_work';
   }
 
   return newState;
