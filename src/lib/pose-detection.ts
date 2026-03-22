@@ -47,10 +47,8 @@ export interface SquatState {
   repCount: number;
   feedback: string;
   formQuality: 'good' | 'needs_work' | 'neutral';
-  /** Internal: timestamp of last rep */
+  /** Internal: timestamp of last rep for debounce */
   _lastRepTime?: number;
-  /** Internal: rolling angle buffer for smoothing */
-  _angleBuffer?: number[];
 }
 
 let lastLogTime = 0;
