@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
-import { detectSquat, type SquatState } from '@/lib/pose-detection';
+import { detectSquat, createInitialSquatState, type SquatState } from '@/lib/pose-detection';
 import { MONSTERS, loadGameState, saveGameState } from '@/lib/game-data';
 import { HPBar } from '@/components/game/HPBar';
 import { CameraView } from '@/components/game/CameraView';
@@ -33,13 +33,7 @@ export default function Battle() {
   const [victory, setVictory] = useState(false);
   const [started, setStarted] = useState(false);
 
-  const squatStateRef = useRef<SquatState>({
-    phase: 'standing',
-    repCount: 0,
-    feedback: 'Get ready!',
-    formQuality: 'neutral',
-    _lastRepTime: 0,
-  });
+  const squatStateRef = useRef<SquatState>(createInitialSquatState());
   const [displayState, setDisplayState] = useState<SquatState>(squatStateRef.current);
   const prevRepRef = useRef(0);
 
@@ -143,6 +137,21 @@ export default function Battle() {
             <p className="font-body text-sm text-foreground">
               Reps completed: <span className="font-pixel text-primary">{displayState.repCount}</span>
             </p>
+            <p className="font-body text-sm text-foreground">
+              Form accuracy: <span className="font-pixel" style={{
+                color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' :
+                       displayState.formScore >= 50 ? 'hsl(var(--game-gold))' :
+                       'hsl(var(--game-warning))'
+              }}>{displayState.formScore}%</span>
+            </p>
+            {displayState.errors.length > 0 && (
+              <div className="text-left">
+                <p className="font-body text-xs text-muted-foreground mb-1">Form notes:</p>
+                {displayState.errors.map((e, i) => (
+                  <p key={i} className="font-body text-xs text-muted-foreground">• {e.message}</p>
+                ))}
+              </div>
+            )}
             {victory && (
               <p className="font-body text-sm text-game-gold">
                 +{monster.goldReward}G earned!
@@ -252,7 +261,7 @@ export default function Battle() {
 
         {/* Feedback overlay on camera */}
         {displayState.feedback && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[90%]">
             <div className={`game-panel px-4 py-2`} style={
               displayState.formQuality === 'good' ? { borderColor: 'hsl(var(--game-success))' } :
               displayState.formQuality === 'needs_work' ? { borderColor: 'hsl(var(--game-warning))' } :
@@ -265,10 +274,24 @@ export default function Battle() {
           </div>
         )}
 
-        {/* Reps counter overlay */}
-        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
-          <span className="text-2xl">💪</span>
-          <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
+        {/* Stats overlay - top of camera */}
+        <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20">
+          <div className="flex items-center gap-1.5">
+            <span className="text-2xl">💪</span>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-body text-xs text-foreground/80 game-text-shadow">
+              {displayState.kneeAngle}°
+            </span>
+            <span className="font-pixel text-xs game-text-shadow" style={{
+              color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' :
+                     displayState.formScore >= 50 ? 'hsl(var(--game-gold))' :
+                     'hsl(var(--game-warning))'
+            }}>
+              {displayState.formScore}%
+            </span>
+          </div>
         </div>
 
         {/* Loading overlay */}
