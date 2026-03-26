@@ -33,13 +33,7 @@ export default function Battle() {
   const [victory, setVictory] = useState(false);
   const [started, setStarted] = useState(false);
 
-  const squatStateRef = useRef<SquatState>({
-    phase: 'standing',
-    repCount: 0,
-    feedback: 'Get ready!',
-    formQuality: 'neutral',
-    _lastRepTime: 0,
-  });
+  const squatStateRef = useRef<SquatState>(createInitialSquatState());
   const [displayState, setDisplayState] = useState<SquatState>(squatStateRef.current);
   const prevRepRef = useRef(0);
 
