@@ -281,8 +281,18 @@ export default function Battle() {
             <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
           </div>
           <div className="flex items-center gap-2">
+            {displayState.isUncertain && (
+              <span className="font-body text-xs text-foreground/60 game-text-shadow">❓</span>
+            )}
             <span className="font-body text-xs text-foreground/80 game-text-shadow">
               {displayState.kneeAngle}°
+            </span>
+            <span className="font-pixel text-xs game-text-shadow" style={{
+              color: displayState.confidence >= 0.9 ? 'hsl(var(--game-success))' :
+                     displayState.confidence >= 0.75 ? 'hsl(var(--game-gold))' :
+                     'hsl(var(--game-warning))'
+            }}>
+              {(displayState.confidence * 100).toFixed(0)}%
             </span>
             <span className="font-pixel text-xs game-text-shadow" style={{
               color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' :
