@@ -246,7 +246,7 @@ export default function Battle() {
 
         {/* Feedback overlay on camera */}
         {displayState.feedback && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-[90%]">
             <div className={`game-panel px-4 py-2`} style={
               displayState.formQuality === 'good' ? { borderColor: 'hsl(var(--game-success))' } :
               displayState.formQuality === 'needs_work' ? { borderColor: 'hsl(var(--game-warning))' } :
@@ -259,10 +259,24 @@ export default function Battle() {
           </div>
         )}
 
-        {/* Reps counter overlay */}
-        <div className="absolute top-3 left-3 flex items-center gap-1.5 z-20">
-          <span className="text-2xl">💪</span>
-          <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
+        {/* Stats overlay - top of camera */}
+        <div className="absolute top-3 left-3 right-3 flex items-center justify-between z-20">
+          <div className="flex items-center gap-1.5">
+            <span className="text-2xl">💪</span>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-body text-xs text-foreground/80 game-text-shadow">
+              {displayState.kneeAngle}°
+            </span>
+            <span className="font-pixel text-xs game-text-shadow" style={{
+              color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' :
+                     displayState.formScore >= 50 ? 'hsl(var(--game-gold))' :
+                     'hsl(var(--game-warning))'
+            }}>
+              {displayState.formScore}%
+            </span>
+          </div>
         </div>
 
         {/* Loading overlay */}
