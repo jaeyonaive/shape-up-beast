@@ -137,6 +137,21 @@ export default function Battle() {
             <p className="font-body text-sm text-foreground">
               Reps completed: <span className="font-pixel text-primary">{displayState.repCount}</span>
             </p>
+            <p className="font-body text-sm text-foreground">
+              Form accuracy: <span className="font-pixel" style={{
+                color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' :
+                       displayState.formScore >= 50 ? 'hsl(var(--game-gold))' :
+                       'hsl(var(--game-warning))'
+              }}>{displayState.formScore}%</span>
+            </p>
+            {displayState.errors.length > 0 && (
+              <div className="text-left">
+                <p className="font-body text-xs text-muted-foreground mb-1">Form notes:</p>
+                {displayState.errors.map((e, i) => (
+                  <p key={i} className="font-body text-xs text-muted-foreground">• {e.message}</p>
+                ))}
+              </div>
+            )}
             {victory && (
               <p className="font-body text-sm text-game-gold">
                 +{monster.goldReward}G earned!
