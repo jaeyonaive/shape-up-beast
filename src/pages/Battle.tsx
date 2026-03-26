@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
-import { detectSquat, type SquatState } from '@/lib/pose-detection';
+import { detectSquat, createInitialSquatState, type SquatState } from '@/lib/pose-detection';
 import { MONSTERS, loadGameState, saveGameState } from '@/lib/game-data';
 import { HPBar } from '@/components/game/HPBar';
 import { CameraView } from '@/components/game/CameraView';
