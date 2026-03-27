@@ -493,8 +493,9 @@ export function detectSquat(
     newState._minKneeAngle = kneeAngle;
   }
 
-  // ─── Reject false positives ──────────────────────────────────────────
-  if (isFP && prevState.phase === 'standing') {
+  // ─── Skip false positive filtering during active squatting ─────────
+  // Only reject if standing and clearly not squatting
+  if (isFP && prevState.phase === 'standing' && kneeAngle > goingDownThreshold) {
     if (sitting) newState.feedback = '🪑 Sitting detected — stand up to start';
     else if (forwardBend) newState.feedback = '🙇 Forward bend — squat with your legs';
     else if (lunge) newState.feedback = '🦵 Lunge detected — keep feet even for squats';
