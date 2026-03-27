@@ -47,20 +47,20 @@ interface CalibrationData {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const SMOOTHING_WINDOW = 3;           // less lag for responsiveness
-const TRAJECTORY_WINDOW = 8;          // frames for direction tracking
-const PHASE_CONFIRM_FRAMES = 2;       // faster phase transitions
-const CONFIDENCE_THRESHOLD = 0.65;    // slightly more forgiving
-const CALIBRATION_FRAMES = 20;        // faster calibration
+const SMOOTHING_WINDOW = 2;           // minimal smoothing for responsiveness
+const TRAJECTORY_WINDOW = 8;
+const PHASE_CONFIRM_FRAMES = 1;       // instant phase transitions
+const CONFIDENCE_THRESHOLD = 0.4;     // very forgiving
+const CALIBRATION_FRAMES = 10;        // quick calibration
 
-const DEFAULT_STANDING_ANGLE = 160;
-const DEFAULT_SQUAT_DEPTH = 110;      // more forgiving depth threshold
-const DEEP_SQUAT_ANGLE = 80;
+const DEFAULT_STANDING_ANGLE = 155;
+const DEFAULT_SQUAT_DEPTH = 130;      // very forgiving depth - any noticeable bend counts
+const DEEP_SQUAT_ANGLE = 90;
 const DEFAULT_GOING_DOWN = 150;
-const GOING_UP_EXIT_OFFSET = 12;
+const GOING_UP_EXIT_OFFSET = 10;
 
-const MAX_FORWARD_LEAN_DEG = 40;      // more forgiving lean
-const MIN_REP_INTERVAL_MS = 600;      // faster rep counting
+const MAX_FORWARD_LEAN_DEG = 50;      // very forgiving lean
+const MIN_REP_INTERVAL_MS = 400;      // fast rep counting
 const MAX_OCCLUSION_FRAMES = 15;
 
 // ─── Initialization ──────────────────────────────────────────────────────────
@@ -252,7 +252,7 @@ function calibrate(landmarks: Landmark[], history: number[]): CalibrationData | 
   const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
   const stddev = Math.sqrt(recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length);
 
-  if (stddev > 5) return null; // too much movement, not standing still
+  if (stddev > 10) return null; // more lenient stability check
 
   const lShoulder = landmarks[POSE.LEFT_SHOULDER];
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
@@ -493,8 +493,9 @@ export function detectSquat(
     newState._minKneeAngle = kneeAngle;
   }
 
-  // ─── Reject false positives ──────────────────────────────────────────
-  if (isFP && prevState.phase === 'standing') {
+  // ─── Skip false positive filtering during active squatting ─────────
+  // Only reject if standing and clearly not squatting
+  if (isFP && prevState.phase === 'standing' && kneeAngle > goingDownThreshold) {
     if (sitting) newState.feedback = '🪑 Sitting detected — stand up to start';
     else if (forwardBend) newState.feedback = '🙇 Forward bend — squat with your legs';
     else if (lunge) newState.feedback = '🦵 Lunge detected — keep feet even for squats';
@@ -533,12 +534,11 @@ export function detectSquat(
   if (kneeAngle >= standingThreshold) {
     // ─── STANDING ──────────────────────────────────────────────────
     if (
-      (prevState.phase === 'going_up' || prevState.phase === 'at_bottom') &&
+      (prevState.phase === 'going_up' || prevState.phase === 'at_bottom' || prevState.phase === 'going_down') &&
       timeSinceLastRep > MIN_REP_INTERVAL_MS &&
-      prevState._phaseFrameCount >= PHASE_CONFIRM_FRAMES
+      prevState._reachedDepth
     ) {
-      // Only count if confidence is high enough
-      if (confidence >= CONFIDENCE_THRESHOLD && prevState._reachedDepth) {
+      // Count rep with minimal gating - if depth was reached, it counts
         const repScore = scoreRep(
           newState._minKneeAngle, torsoLean, kneeCollapseResult.collapsed,
           newState._reachedDepth, asymmetry, confidence
@@ -562,14 +562,6 @@ export function detectSquat(
         }
 
         console.log(`[FitMon] ✅ REP #${newState.repCount} | Score: ${repScore}% | Conf: ${confidence.toFixed(2)} | MinAngle: ${newState._minKneeAngle.toFixed(1)}°`);
-      } else if (!prevState._reachedDepth) {
-        newState.feedback = '⚠️ Go deeper! That didn\'t count';
-        newState.formQuality = 'needs_work';
-      } else {
-        newState.feedback = '❓ Uncertain detection — try again';
-        newState.formQuality = 'neutral';
-        newState.isUncertain = true;
-      }
     } else if (prevState.phase === 'standing') {
       newState.feedback = 'Start squatting down!';
       newState.formQuality = 'neutral';
