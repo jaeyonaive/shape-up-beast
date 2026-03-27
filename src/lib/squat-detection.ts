@@ -252,7 +252,7 @@ function calibrate(landmarks: Landmark[], history: number[]): CalibrationData | 
   const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
   const stddev = Math.sqrt(recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length);
 
-  if (stddev > 5) return null; // too much movement, not standing still
+  if (stddev > 10) return null; // more lenient stability check
 
   const lShoulder = landmarks[POSE.LEFT_SHOULDER];
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
