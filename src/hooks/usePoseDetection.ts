@@ -62,7 +62,7 @@ export function usePoseDetection() {
 
       // Initialize MediaPipe Tasks Vision PoseLandmarker
       const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm'
       );
 
       const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
