@@ -57,7 +57,7 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
     <div className="absolute inset-0 z-0 bg-black">
       <video
         ref={videoRef}
-        className="w-full h-full object-contain mirror"
+        className="w-full h-full object-cover mirror"
         autoPlay
         playsInline
         muted
