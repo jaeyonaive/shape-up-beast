@@ -52,7 +52,8 @@ export function usePoseDetection() {
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 1280 }, aspectRatio: { ideal: 9/16 } },
         audio: false,
       });
-      streamRef.current = stream;
+      streamRef.current = cameraStream;
+      setStream(cameraStream);
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
