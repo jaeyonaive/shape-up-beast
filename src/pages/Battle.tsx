@@ -247,62 +247,6 @@ export default function Battle() {
             </div>
           )}
         </div>
-        {/* Calibration overlay */}
-        {!gameActive && (
-          <div className="mb-4 p-4 rounded-2xl bg-background/80 backdrop-blur-sm border border-border text-center">
-            <p className="font-pixel text-xs text-primary mb-2">CALIBRATING</p>
-            <p className="font-body text-sm text-foreground mb-2">{displayState.feedback}</p>
-            {/* Progress bar */}
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${displayState.calibrationProgress ?? 0}%` }}
-              />
-            </div>
-            <p className="font-body text-xs text-muted-foreground mt-1">
-              {displayState.calibrationProgress ?? 0}%
-            </p>
-          </div>
-        )}
-
-        {/* Game stats bar */}
-        {gameActive && (
-          <div className="space-y-3">
-            {/* Feedback */}
-            <div className={`p-3 rounded-xl text-center backdrop-blur-sm ${
-              displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
-              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
-              'bg-background/60 border border-border'
-            }`}>
-              <p className="font-body text-sm font-semibold text-foreground game-text-shadow">
-                {displayState.feedback}
-              </p>
-            </div>
-
-            {/* Stats row */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">💪</span>
-                <span className="font-pixel text-lg text-foreground game-text-shadow">{displayState.repCount}</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">⏱</span>
-                <span className="font-pixel text-lg text-foreground game-text-shadow">{timeLeft}s</span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🔥</span>
-                <span className="font-pixel text-lg text-foreground game-text-shadow">{streak}</span>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <img src={coinImg} alt="coins" className="w-7 h-7" />
-                <span className="font-pixel text-sm text-game-gold game-text-shadow">{coins}G</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Loading overlay */}
