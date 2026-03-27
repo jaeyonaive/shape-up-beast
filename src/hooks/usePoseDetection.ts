@@ -6,6 +6,7 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 export function usePoseDetection() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,11 +48,12 @@ export function usePoseDetection() {
       }
 
       // Get camera
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const cameraStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 1280 }, aspectRatio: { ideal: 9/16 } },
         audio: false,
       });
-      streamRef.current = stream;
+      streamRef.current = cameraStream;
+      setStream(cameraStream);
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -159,11 +161,12 @@ export function usePoseDetection() {
     }
     setCameraActive(false);
     setLandmarks(null);
+    setStream(null);
   }, []);
 
   useEffect(() => {
     return () => { stopCamera(); };
   }, [stopCamera]);
 
-  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera };
+  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream };
 }
