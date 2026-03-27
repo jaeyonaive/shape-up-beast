@@ -163,42 +163,90 @@ export default function Battle() {
     );
   }
 
-  // ─── MAIN GAME SCREEN (no camera visible) ──────────────────────────
   return (
     <div className="h-screen w-screen relative overflow-hidden flex flex-col">
-      {/* Video + canvas are created programmatically by usePoseDetection */}
-
-      {/* Full-screen battle background */}
-      <img
-        src={battleBg}
-        alt=""
-        className="absolute inset-0 w-full h-full object-cover"
-      />
-
-      {/* Back button */}
-      <button
-        onClick={() => { stopCamera(); navigate('/'); }}
-        className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
-      >
-        <span className="text-foreground text-lg">✕</span>
-      </button>
-
-      {/* HP Bar */}
-      <div className="absolute top-4 left-3 right-14 z-20">
-        <HPBar current={hp} max={monster.maxHp} name={monster.name} />
-      </div>
-
-      {/* Monster - centered */}
-      <div className="flex-1 flex items-center justify-center z-10 pointer-events-none">
+      {/* Top 60%: Monster + battle scene */}
+      <div className="relative" style={{ flex: '0 0 60%' }}>
+        {/* Battle background */}
         <img
-          src={monsterImages[monster.image]}
-          alt="Monster"
-          className={`w-72 h-72 object-contain drop-shadow-2xl ${isHit ? 'monster-hit' : 'monster-float'}`}
+          src={battleBg}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
         />
+
+        {/* Back button */}
+        <button
+          onClick={() => { stopCamera(); navigate('/'); }}
+          className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
+        >
+          <span className="text-foreground text-lg">✕</span>
+        </button>
+
+        {/* HP Bar */}
+        <div className="absolute top-4 left-3 right-14 z-20">
+          <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+        </div>
+
+        {/* Monster - centered */}
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <img
+            src={monsterImages[monster.image]}
+            alt="Monster"
+            className={`w-56 h-56 object-contain drop-shadow-2xl ${isHit ? 'monster-hit' : 'monster-float'}`}
+          />
+        </div>
+
+        {/* Stats overlay on monster area */}
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">💪</span>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⏱</span>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{timeLeft}s</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🔥</span>
+            <span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <img src={coinImg} alt="coins" className="w-6 h-6" />
+            <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
+          </div>
+        </div>
       </div>
 
-      {/* Bottom HUD */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 pb-6 px-4">
+      {/* Bottom 40%: Camera with AR overlay */}
+      <div className="relative flex-1 bg-black">
+        <CameraOverlay stream={stream} landmarks={landmarks} />
+
+        {/* Feedback overlay on camera */}
+        <div className="absolute bottom-3 left-3 right-3 z-20">
+          {/* Calibration overlay */}
+          {!gameActive && (
+            <div className="p-3 rounded-xl bg-background/80 backdrop-blur-sm border border-border text-center">
+              <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
+              <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${displayState.calibrationProgress ?? 0}%` }} />
+              </div>
+            </div>
+          )}
+
+          {/* Game feedback */}
+          {gameActive && (
+            <div className={`p-2 rounded-xl text-center backdrop-blur-sm ${
+              displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
+              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
+              'bg-background/60 border border-border'
+            }`}>
+              <p className="font-body text-xs font-semibold text-foreground game-text-shadow">
+                {displayState.feedback}
+              </p>
+            </div>
+          )}
+        </div>
         {/* Calibration overlay */}
         {!gameActive && (
           <div className="mb-4 p-4 rounded-2xl bg-background/80 backdrop-blur-sm border border-border text-center">
