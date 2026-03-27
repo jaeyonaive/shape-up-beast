@@ -562,14 +562,6 @@ export function detectSquat(
         }
 
         console.log(`[FitMon] ✅ REP #${newState.repCount} | Score: ${repScore}% | Conf: ${confidence.toFixed(2)} | MinAngle: ${newState._minKneeAngle.toFixed(1)}°`);
-      } else if (!prevState._reachedDepth) {
-        newState.feedback = '⚠️ Go deeper! That didn\'t count';
-        newState.formQuality = 'needs_work';
-      } else {
-        newState.feedback = '❓ Uncertain detection — try again';
-        newState.formQuality = 'neutral';
-        newState.isUncertain = true;
-      }
     } else if (prevState.phase === 'standing') {
       newState.feedback = 'Start squatting down!';
       newState.formQuality = 'neutral';
