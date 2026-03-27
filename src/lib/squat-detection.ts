@@ -47,21 +47,21 @@ interface CalibrationData {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const SMOOTHING_WINDOW = 5;           // frames for angle smoothing
-const TRAJECTORY_WINDOW = 10;         // frames for direction tracking
-const PHASE_CONFIRM_FRAMES = 3;       // frames to confirm phase transition
-const CONFIDENCE_THRESHOLD = 0.75;    // min confidence to count a rep
-const CALIBRATION_FRAMES = 30;        // frames needed for calibration
+const SMOOTHING_WINDOW = 3;           // less lag for responsiveness
+const TRAJECTORY_WINDOW = 8;          // frames for direction tracking
+const PHASE_CONFIRM_FRAMES = 2;       // faster phase transitions
+const CONFIDENCE_THRESHOLD = 0.65;    // slightly more forgiving
+const CALIBRATION_FRAMES = 20;        // faster calibration
 
-const DEFAULT_STANDING_ANGLE = 165;
-const DEFAULT_SQUAT_DEPTH = 100;
-const DEEP_SQUAT_ANGLE = 75;
-const DEFAULT_GOING_DOWN = 145;
-const GOING_UP_EXIT_OFFSET = 15;     // hysteresis offset
+const DEFAULT_STANDING_ANGLE = 160;
+const DEFAULT_SQUAT_DEPTH = 110;      // more forgiving depth threshold
+const DEEP_SQUAT_ANGLE = 80;
+const DEFAULT_GOING_DOWN = 150;
+const GOING_UP_EXIT_OFFSET = 12;
 
-const MAX_FORWARD_LEAN_DEG = 35;
-const MIN_REP_INTERVAL_MS = 800;
-const MAX_OCCLUSION_FRAMES = 10;
+const MAX_FORWARD_LEAN_DEG = 40;      // more forgiving lean
+const MIN_REP_INTERVAL_MS = 600;      // faster rep counting
+const MAX_OCCLUSION_FRAMES = 15;
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
