@@ -4,8 +4,8 @@ import { type Landmark, drawPose } from '@/lib/pose-detection';
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 export function usePoseDetection() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +21,32 @@ export function usePoseDetection() {
       setIsLoading(true);
       setError(null);
 
-      // Get camera first (must be in click handler for mobile)
+      // Create hidden video and canvas elements programmatically
+      if (!videoRef.current) {
+        const video = document.createElement('video');
+        video.setAttribute('autoplay', '');
+        video.setAttribute('playsinline', '');
+        video.setAttribute('muted', '');
+        video.muted = true;
+        video.style.position = 'fixed';
+        video.style.top = '-9999px';
+        video.style.left = '-9999px';
+        video.style.width = '1px';
+        video.style.height = '1px';
+        video.style.opacity = '0';
+        video.style.pointerEvents = 'none';
+        document.body.appendChild(video);
+        videoRef.current = video;
+      }
+
+      if (!canvasRef.current) {
+        const canvas = document.createElement('canvas');
+        canvas.style.display = 'none';
+        document.body.appendChild(canvas);
+        canvasRef.current = canvas;
+      }
+
+      // Get camera
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 1280 }, aspectRatio: { ideal: 9/16 } },
         audio: false,
@@ -30,10 +55,6 @@ export function usePoseDetection() {
 
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (!video || !canvas) {
-        stream.getTracks().forEach(t => t.stop());
-        throw new Error('Video element not ready');
-      }
 
       video.srcObject = stream;
       await video.play();
@@ -72,7 +93,6 @@ export function usePoseDetection() {
         }
 
         const now = performance.now();
-        // Ensure strictly increasing timestamps
         if (now <= lastTimestampRef.current) {
           rafRef.current = requestAnimationFrame(processFrame);
           return;
@@ -82,24 +102,16 @@ export function usePoseDetection() {
         try {
           const result = landmarkerRef.current.detectForVideo(video, now);
 
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            if (result.landmarks && result.landmarks.length > 0) {
-              const poseLandmarks: Landmark[] = result.landmarks[0].map(lm => ({
-                x: lm.x,
-                y: lm.y,
-                z: lm.z,
-                visibility: lm.visibility ?? 1,
-              }));
-              setLandmarks(poseLandmarks);
-              drawPose(ctx, poseLandmarks, canvas.width, canvas.height);
-            } else {
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              setLandmarks(null);
-            }
+          if (result.landmarks && result.landmarks.length > 0) {
+            const poseLandmarks: Landmark[] = result.landmarks[0].map((lm: any) => ({
+              x: lm.x,
+              y: lm.y,
+              z: lm.z,
+              visibility: lm.visibility ?? 1,
+            }));
+            setLandmarks(poseLandmarks);
+          } else {
+            setLandmarks(null);
           }
         } catch (e) {
           console.warn('[FitMon] Frame error:', e);
@@ -138,6 +150,12 @@ export function usePoseDetection() {
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.remove();
+      videoRef.current = null;
+    }
+    if (canvasRef.current) {
+      canvasRef.current.remove();
+      canvasRef.current = null;
     }
     setCameraActive(false);
     setLandmarks(null);
@@ -147,5 +165,5 @@ export function usePoseDetection() {
     return () => { stopCamera(); };
   }, [stopCamera]);
 
-  return { videoRef, canvasRef, landmarks, isLoading, error, cameraActive, startCamera, stopCamera };
+  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera };
 }

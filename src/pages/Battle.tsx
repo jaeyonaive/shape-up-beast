@@ -21,7 +21,7 @@ export default function Battle() {
   const monsterIndex = parseInt(monsterId || '0', 10);
   const monster = MONSTERS[monsterIndex];
 
-  const { videoRef, canvasRef, landmarks, isLoading, error, cameraActive, startCamera, stopCamera } = usePoseDetection();
+  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera } = usePoseDetection();
 
   const [hp, setHp] = useState(monster?.maxHp || 100);
   const [timeLeft, setTimeLeft] = useState(monster?.timeLimit || 60);
@@ -165,20 +165,7 @@ export default function Battle() {
   // ─── MAIN GAME SCREEN (no camera visible) ──────────────────────────
   return (
     <div className="h-screen w-screen relative overflow-hidden flex flex-col">
-      {/* Hidden video + canvas for pose detection */}
-      <video
-        ref={videoRef}
-        className="absolute opacity-0 pointer-events-none"
-        style={{ width: 1, height: 1 }}
-        autoPlay
-        playsInline
-        muted
-      />
-      <canvas
-        ref={canvasRef}
-        className="absolute opacity-0 pointer-events-none"
-        style={{ width: 1, height: 1 }}
-      />
+      {/* Video + canvas are created programmatically by usePoseDetection */}
 
       {/* Full-screen battle background */}
       <img
