@@ -192,7 +192,7 @@ export default function Battle() {
   return (
     <div className="h-screen w-screen relative overflow-hidden flex flex-row">
       {/* Top half: Monster + background + HUD */}
-      <div className="relative flex-1 min-h-0" style={{ flex: '1 1 55%' }}>
+      <div className="relative flex-1 min-w-0 h-full">
         {/* Battle background */}
         <img
           src={battleBg}
