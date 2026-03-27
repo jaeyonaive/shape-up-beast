@@ -256,7 +256,7 @@ export default function Battle() {
       </div>
 
       {/* Bottom half: Camera feed */}
-      <div className="relative h-full" style={{ flex: '0 0 60%' }}>
+      <div className="relative flex-1 min-w-0">
         <CameraView videoRef={videoRef} canvasRef={canvasRef} />
 
         {/* Feedback overlay on camera */}
