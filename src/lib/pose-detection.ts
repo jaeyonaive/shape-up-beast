@@ -96,3 +96,4 @@ export function drawPose(
 // Re-export squat types from new module
 export type { SquatPhase, SquatState, FormError } from './squat-detection';
 export { detectSquat, createInitialSquatState } from './squat-detection';
+
