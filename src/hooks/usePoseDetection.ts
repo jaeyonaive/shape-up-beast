@@ -168,5 +168,5 @@ export function usePoseDetection() {
     return () => { stopCamera(); };
   }, [stopCamera]);
 
-  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, videoElement: videoRef.current };
+  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream };
 }
