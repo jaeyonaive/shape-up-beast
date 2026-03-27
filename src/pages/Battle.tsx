@@ -201,11 +201,18 @@ export default function Battle() {
         {/* Calibration overlay */}
         {!gameActive && (
           <div className="mb-4 p-4 rounded-2xl bg-background/80 backdrop-blur-sm border border-border text-center">
-            <p className="font-pixel text-xs text-primary mb-1">CALIBRATING</p>
-            <p className="font-body text-sm text-foreground">{displayState.feedback}</p>
-            {displayState.bodyDetected && (
-              <p className="font-body text-xs text-muted-foreground mt-1">✅ Body detected</p>
-            )}
+            <p className="font-pixel text-xs text-primary mb-2">CALIBRATING</p>
+            <p className="font-body text-sm text-foreground mb-2">{displayState.feedback}</p>
+            {/* Progress bar */}
+            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${displayState.calibrationProgress ?? 0}%` }}
+              />
+            </div>
+            <p className="font-body text-xs text-muted-foreground mt-1">
+              {displayState.calibrationProgress ?? 0}%
+            </p>
           </div>
         )}
 
