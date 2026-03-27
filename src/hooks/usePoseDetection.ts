@@ -1,12 +1,10 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { type Landmark, drawPose } from '@/lib/pose-detection';
+import { type Landmark } from '@/lib/pose-detection';
 // @ts-ignore - mediapipe tasks-vision types
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 export function usePoseDetection() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +20,7 @@ export function usePoseDetection() {
       setIsLoading(true);
       setError(null);
 
-      // Create hidden video and canvas elements programmatically
+      // Create hidden video element
       if (!videoRef.current) {
         const video = document.createElement('video');
         video.setAttribute('autoplay', '');
@@ -40,36 +38,27 @@ export function usePoseDetection() {
         videoRef.current = video;
       }
 
-      if (!canvasRef.current) {
-        const canvas = document.createElement('canvas');
-        canvas.style.display = 'none';
-        document.body.appendChild(canvas);
-        canvasRef.current = canvas;
-      }
+      // Start camera and model load in parallel
+      const [cameraStream, vision] = await Promise.all([
+        navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false,
+        }),
+        FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm'
+        ),
+      ]);
 
-      // Get camera
-      const cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 1280 }, aspectRatio: { ideal: 9/16 } },
-        audio: false,
-      });
       streamRef.current = cameraStream;
-      setStream(cameraStream);
-
       const video = videoRef.current;
-      const canvas = canvasRef.current;
-
-      video.srcObject = stream;
+      video.srcObject = cameraStream; // FIX: was using stale `stream` state
       await video.play();
       console.log('[FitMon] Camera started:', video.videoWidth, 'x', video.videoHeight);
 
-      // Initialize MediaPipe Tasks Vision PoseLandmarker
-      const vision = await FilesetResolver.forVisionTasks(
-        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm'
-      );
-
+      // Use LITE model for much faster loading
       const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task',
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
@@ -79,7 +68,7 @@ export function usePoseDetection() {
         minTrackingConfidence: 0.5,
       });
 
-      console.log('[FitMon] PoseLandmarker (heavy model) initialized');
+      console.log('[FitMon] PoseLandmarker (lite) initialized');
       landmarkerRef.current = poseLandmarker;
       activeRef.current = true;
       setCameraActive(true);
@@ -103,7 +92,6 @@ export function usePoseDetection() {
 
         try {
           const result = landmarkerRef.current.detectForVideo(video, now);
-
           if (result.landmarks && result.landmarks.length > 0) {
             const poseLandmarks: Landmark[] = result.landmarks[0].map((lm: any) => ({
               x: lm.x,
@@ -155,18 +143,13 @@ export function usePoseDetection() {
       videoRef.current.remove();
       videoRef.current = null;
     }
-    if (canvasRef.current) {
-      canvasRef.current.remove();
-      canvasRef.current = null;
-    }
     setCameraActive(false);
     setLandmarks(null);
-    setStream(null);
   }, []);
 
   useEffect(() => {
     return () => { stopCamera(); };
   }, [stopCamera]);
 
-  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream };
+  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera };
 }
