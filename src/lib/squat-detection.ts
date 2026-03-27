@@ -534,12 +534,11 @@ export function detectSquat(
   if (kneeAngle >= standingThreshold) {
     // ─── STANDING ──────────────────────────────────────────────────
     if (
-      (prevState.phase === 'going_up' || prevState.phase === 'at_bottom') &&
+      (prevState.phase === 'going_up' || prevState.phase === 'at_bottom' || prevState.phase === 'going_down') &&
       timeSinceLastRep > MIN_REP_INTERVAL_MS &&
-      prevState._phaseFrameCount >= PHASE_CONFIRM_FRAMES
+      prevState._reachedDepth
     ) {
-      // Only count if confidence is high enough
-      if (confidence >= CONFIDENCE_THRESHOLD && prevState._reachedDepth) {
+      // Count rep with minimal gating - if depth was reached, it counts
         const repScore = scoreRep(
           newState._minKneeAngle, torsoLean, kneeCollapseResult.collapsed,
           newState._reachedDepth, asymmetry, confidence
