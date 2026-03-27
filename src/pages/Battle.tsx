@@ -190,9 +190,9 @@ export default function Battle() {
   }
 
   return (
-    <div className="h-screen w-screen relative overflow-hidden flex flex-row">
-      {/* Top half: Monster + background + HUD */}
-      <div className="relative flex-1 min-w-0 h-full">
+    <div className="h-screen w-screen relative overflow-hidden flex flex-col">
+      {/* Top: Monster + background + HUD */}
+      <div className="relative" style={{ flex: '0 0 40%' }}>
         {/* Battle background */}
         <img
           src={battleBg}
@@ -256,7 +256,7 @@ export default function Battle() {
       </div>
 
       {/* Bottom half: Camera feed */}
-      <div className="relative h-full" style={{ flex: '0 0 60%' }}>
+      <div className="relative flex-1 min-w-0">
         <CameraView videoRef={videoRef} canvasRef={canvasRef} />
 
         {/* Feedback overlay on camera */}
