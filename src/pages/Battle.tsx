@@ -21,7 +21,7 @@ export default function Battle() {
   const monsterIndex = parseInt(monsterId || '0', 10);
   const monster = MONSTERS[monsterIndex];
 
-  const { videoRef, canvasRef, landmarks, isLoading, error, cameraActive, startCamera, stopCamera } = usePoseDetection();
+  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera } = usePoseDetection();
 
   const [hp, setHp] = useState(monster?.maxHp || 100);
   const [timeLeft, setTimeLeft] = useState(monster?.timeLimit || 60);
