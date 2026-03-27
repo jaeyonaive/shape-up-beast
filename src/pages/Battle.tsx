@@ -103,9 +103,9 @@ export default function Battle() {
   // Pre-start screen
   if (!started) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
-        <img src={monsterImages[monster.image]} alt={monster.name} className="w-56 h-56 object-contain drop-shadow-2xl monster-float" />
-        <div className="relative z-20 mt-64 text-center">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 gap-6">
+        <img src={monsterImages[monster.image]} alt={monster.name} className="w-48 h-48 object-contain drop-shadow-2xl monster-float" />
+        <div className="text-center">
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">{monster.name}</h2>
           <p className="font-body text-sm text-muted-foreground mb-2">
             {monster.isBoss ? '🐉 BOSS BATTLE' : '⚔️ Battle'} — {monster.exercise}
@@ -115,9 +115,10 @@ export default function Battle() {
           </p>
           <Button
             onClick={handleStart}
+            disabled={isLoading}
             className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow"
           >
-            📷 Start Camera & Fight!
+            {isLoading ? '⏳ Loading...' : '📷 Start Camera & Fight!'}
           </Button>
         </div>
       </div>
