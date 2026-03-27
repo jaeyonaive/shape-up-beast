@@ -6,7 +6,7 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 export function usePoseDetection() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const videoElRef = useRef<HTMLVideoElement | null>(null); // exposed for display
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
