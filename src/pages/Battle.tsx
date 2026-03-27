@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { CameraOverlay } from '@/components/game/CameraOverlay';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import { detectSquat, createInitialSquatState, type SquatState } from '@/lib/squat-detection';
