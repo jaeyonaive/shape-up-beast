@@ -227,8 +227,8 @@ export default function Battle() {
             <p className="font-body text-sm text-game-gold">+{coins}G earned!</p>
           </div>
           <div className="flex flex-col gap-3">
-            <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">Home</Button>
-            <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">Go Again</Button>
+            <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">🏠 Home</Button>
+            <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">🔄 Go Again</Button>
           </div>
         </div>
       </div>
