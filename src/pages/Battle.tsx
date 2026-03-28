@@ -1,139 +1,152 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { CameraOverlay } from '@/components/game/CameraOverlay';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import { detectSquat, createInitialSquatState, type SquatState } from '@/lib/squat-detection';
-import { MONSTERS, loadGameState, saveGameState } from '@/lib/game-data';
-import { HPBar } from '@/components/game/HPBar';
+import {
+  MONSTER, loadGameState, saveGameState,
+  CALORIES_PER_SQUAT, BASE_POINTS_PER_SQUAT, COINS_PER_SQUAT,
+  COMBO_TIMEOUT_MS, getComboMultiplier, getComboLabel,
+} from '@/lib/game-data';
 import { Button } from '@/components/ui/button';
-import battleBg from '@/assets/battle-bg.jpg';
 import battleBgForest from '@/assets/battle-bg-forest.jpg';
 import coinImg from '@/assets/coin.png';
 import monsterTutorial from '@/assets/monster-tutorial.png';
-import monsterBoss from '@/assets/monster-boss.png';
-
-const monsterImages: Record<string, string> = {
-  'monster-tutorial': monsterTutorial,
-  'monster-boss': monsterBoss,
-};
 
 export default function Battle() {
-  const { monsterId } = useParams();
   const navigate = useNavigate();
-  const monsterIndex = parseInt(monsterId || '0', 10);
-  const monster = MONSTERS[monsterIndex];
+  const monster = MONSTER;
 
-  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream } = usePoseDetection();
+  const { landmarks, isLoading, error, startCamera, stopCamera, stream } = usePoseDetection();
 
-  const [hp, setHp] = useState(monster?.maxHp || 100);
-  const [timeLeft, setTimeLeft] = useState(monster?.timeLimit || 60);
+  const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [calories, setCalories] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   const [isHit, setIsHit] = useState(false);
-  const [damageText, setDamageText] = useState<string | null>(null);
-  const [gameOver, setGameOver] = useState(false);
-  const [victory, setVictory] = useState(false);
+  const [comboText, setComboText] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const [gameActive, setGameActive] = useState(false);
+  const [sessionOver, setSessionOver] = useState(false);
 
   const squatStateRef = useRef<SquatState>(createInitialSquatState());
   const [displayState, setDisplayState] = useState<SquatState>(squatStateRef.current);
   const prevRepRef = useRef(0);
+  const lastRepTimeRef = useRef(Date.now());
+  const streakRef = useRef(0);
 
+  // Timer
   useEffect(() => {
-    if (!gameActive || gameOver || victory) return;
-    if (timeLeft <= 0) { setGameOver(true); return; }
-    const interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
+    if (!gameActive || sessionOver) return;
+    const interval = setInterval(() => setElapsed(t => t + 1), 1000);
     return () => clearInterval(interval);
-  }, [gameActive, timeLeft, gameOver, victory]);
+  }, [gameActive, sessionOver]);
 
+  // Combo timeout checker
   useEffect(() => {
-    if (!landmarks || !started || gameOver || victory) return;
+    if (!gameActive || sessionOver) return;
+    const interval = setInterval(() => {
+      if (streakRef.current > 0 && Date.now() - lastRepTimeRef.current > COMBO_TIMEOUT_MS) {
+        streakRef.current = 0;
+        setStreak(0);
+        setComboText(null);
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [gameActive, sessionOver]);
+
+  // Pose detection & squat counting
+  useEffect(() => {
+    if (!landmarks || !started || sessionOver) return;
     const newState = detectSquat(landmarks, squatStateRef.current);
     squatStateRef.current = newState;
     setDisplayState({ ...newState });
+
     if (newState.calibrated && !gameActive) setGameActive(true);
+
     if (newState.repCount > prevRepRef.current && gameActive) {
       prevRepRef.current = newState.repCount;
-      const damagePerRep = Math.ceil(monster.maxHp / monster.repsToKill);
-      setHp(prev => {
-        const newHp = Math.max(0, prev - damagePerRep);
-        if (newHp <= 0) {
-          setVictory(true);
-          setCoins(monster.goldReward);
-          const state = loadGameState();
-          state.totalCoins += monster.goldReward;
-          state.totalReps += newState.repCount;
-          if (!state.completedMonsters.includes(monster.id)) state.completedMonsters.push(monster.id);
-          saveGameState(state);
-        }
-        return newHp;
-      });
+      lastRepTimeRef.current = Date.now();
+
+      // Update streak
+      const newStreak = streakRef.current + 1;
+      streakRef.current = newStreak;
+      setStreak(newStreak);
+
+      const multiplier = getComboMultiplier(newStreak);
+      const points = BASE_POINTS_PER_SQUAT * multiplier;
+      const earnedCoins = COINS_PER_SQUAT * multiplier;
+
+      setScore(s => s + points);
+      setCoins(c => c + earnedCoins);
+      setCalories(cal => +(cal + CALORIES_PER_SQUAT).toFixed(1));
+
+      const label = getComboLabel(newStreak);
+      if (label) setComboText(label);
+
+      // Monster hit effect
       setIsHit(true);
-      setDamageText(`-${damagePerRep}`);
-      setStreak(s => s + 1);
       setTimeout(() => setIsHit(false), 400);
-      setTimeout(() => setDamageText(null), 800);
     }
-  }, [landmarks, started, gameOver, victory, monster, gameActive]);
+  }, [landmarks, started, sessionOver, gameActive]);
 
   const handleStart = useCallback(async () => {
     setStarted(true);
     await startCamera();
   }, [startCamera]);
 
-  if (!monster) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="font-pixel text-sm text-foreground">Monster not found</p>
-      </div>
-    );
-  }
+  const handleEndSession = useCallback(() => {
+    setSessionOver(true);
+    stopCamera();
+    const state = loadGameState();
+    state.totalCoins += coins;
+    state.totalReps += displayState.repCount;
+    state.totalCalories = +(state.totalCalories + calories).toFixed(1);
+    if (score > state.highScore) state.highScore = score;
+    if (streak > state.bestStreak) state.bestStreak = streak;
+    saveGameState(state);
+  }, [coins, calories, score, streak, displayState.repCount, stopCamera]);
+
+  const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
   if (!started) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 gap-6">
-        <img src={monsterImages[monster.image]} alt={monster.name} className="w-48 h-48 object-contain drop-shadow-2xl monster-float" />
+        <img src={monsterTutorial} alt={monster.name} className="w-48 h-48 object-contain drop-shadow-2xl monster-float" />
         <div className="text-center">
-          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">{monster.name}</h2>
+          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">Endless Squat Mode</h2>
           <p className="font-body text-sm text-muted-foreground mb-2">
-            {monster.isBoss ? '🐉 BOSS BATTLE' : '⚔️ Battle'} — {monster.exercise}
+            🏋️ Squat to score points!
           </p>
-          <p className="font-body text-sm text-muted-foreground mb-6">
-            {monster.repsToKill} reps to defeat • {monster.timeLimit}s time limit
+          <p className="font-body text-xs text-muted-foreground mb-6">
+            Build combos • Earn coins • Burn calories
           </p>
           <Button onClick={handleStart} disabled={isLoading} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
-            {isLoading ? '⏳ Loading...' : '📷 Start Camera & Fight!'}
+            {isLoading ? '⏳ Loading...' : '📷 Start Camera & Go!'}
           </Button>
         </div>
       </div>
     );
   }
 
-  if (victory || gameOver) {
+  if (sessionOver) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
         <div className="game-panel p-8 max-w-sm w-full text-center slide-up">
-          <div className="text-6xl mb-4">{victory ? '🎉' : '💀'}</div>
-          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">
-            {victory ? 'Victory!' : "Time's Up!"}
-          </h2>
-          <p className="font-body text-sm text-muted-foreground mb-4">
-            {victory ? `You defeated ${monster.name}!` : `${monster.name} survived! Try again!`}
-          </p>
+          <div className="text-6xl mb-4">🏆</div>
+          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">Session Complete!</h2>
           <div className="space-y-2 mb-6">
+            <p className="font-body text-sm text-foreground">Score: <span className="font-pixel text-primary">{score}</span></p>
             <p className="font-body text-sm text-foreground">Reps: <span className="font-pixel text-primary">{displayState.repCount}</span></p>
-            <p className="font-body text-sm text-foreground">Form: <span className="font-pixel" style={{
-              color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' : displayState.formScore >= 50 ? 'hsl(var(--game-gold))' : 'hsl(var(--game-warning))'
-            }}>{displayState.formScore}%</span></p>
-            {victory && <p className="font-body text-sm text-game-gold">+{monster.goldReward}G earned!</p>}
+            <p className="font-body text-sm text-foreground">Best Combo: <span className="font-pixel text-secondary">x{streak}</span></p>
+            <p className="font-body text-sm text-foreground">Time: <span className="font-pixel text-foreground">{formatTime(elapsed)}</span></p>
+            <p className="font-body text-sm text-foreground">Calories (est.): <span className="font-pixel text-game-gold">{calories} kcal</span></p>
+            <p className="font-body text-sm text-game-gold">+{coins}G earned!</p>
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">🏠 Home</Button>
-            {!victory && <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">🔄 Retry</Button>}
-            {victory && monsterIndex < MONSTERS.length - 1 && (
-              <Button variant="outline" onClick={() => navigate(`/battle/${monsterIndex + 1}`)} className="w-full h-12 font-pixel text-[10px] border-secondary text-secondary">⚔️ Next Monster</Button>
-            )}
+            <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">🔄 Go Again</Button>
           </div>
         </div>
       </div>
@@ -144,32 +157,47 @@ export default function Battle() {
     <div className="h-screen w-screen relative overflow-hidden flex flex-col">
       {/* Top 60%: Monster + battle scene */}
       <div className="relative" style={{ flex: '0 0 60%' }}>
-        <img src={monsterIndex === 0 ? battleBgForest : battleBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <button onClick={() => { stopCamera(); navigate('/'); }} className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
+        <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
+
+        {/* Close button */}
+        <button onClick={handleEndSession} className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
           <span className="text-foreground text-lg">✕</span>
         </button>
-        <div className="absolute top-4 left-3 right-14 z-20">
-          <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+
+        {/* Score & Timer - top bar */}
+        <div className="absolute top-4 left-3 right-14 z-20 flex items-center justify-between">
+          <div className="game-panel px-3 py-1.5">
+            <span className="font-pixel text-xs text-primary">{score} pts</span>
+          </div>
+          <div className="game-panel px-3 py-1.5">
+            <span className="font-pixel text-xs text-foreground">{formatTime(elapsed)}</span>
+          </div>
         </div>
+
+        {/* Monster */}
         <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
           <div className="relative">
             <img
-              src={monsterImages[monster.image]}
+              src={monsterTutorial}
               alt="Monster"
-              className={`w-56 h-56 object-contain drop-shadow-2xl ${isHit ? '' : 'monster-float'}`}
+              className={`w-80 h-80 object-contain drop-shadow-2xl ${isHit ? '' : 'monster-float'}`}
               style={isHit ? { filter: 'brightness(2) hue-rotate(30deg)', transform: 'scale(1.1)' } : {}}
             />
-            {damageText && (
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 animate-bounce">
-                <span className="font-pixel text-2xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
-              </div>
-            )}
           </div>
         </div>
+
+        {/* Combo text */}
+        {comboText && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 z-20 animate-bounce">
+            <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
+          </div>
+        )}
+
+        {/* Bottom stats bar */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
           <div className="flex items-center gap-2"><span className="text-xl">💪</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
-          <div className="flex items-center gap-2"><span className="text-xl">⏱</span><span className="font-pixel text-sm text-foreground game-text-shadow">{timeLeft}s</span></div>
           <div className="flex items-center gap-2"><span className="text-xl">🔥</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xs">🔥</span><span className="font-pixel text-[10px] text-muted-foreground game-text-shadow">{calories} kcal</span></div>
           <div className="flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-6 h-6" /><span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span></div>
         </div>
       </div>
