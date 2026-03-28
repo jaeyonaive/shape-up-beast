@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CameraOverlay } from '@/components/game/CameraOverlay';
 import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { HPBar } from '@/components/game/HPBar';
+import { BodySilhouette } from '@/components/game/BodySilhouette';
 import { useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import {
