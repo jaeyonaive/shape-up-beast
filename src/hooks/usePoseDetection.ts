@@ -147,6 +147,7 @@ export function usePoseDetection() {
     }
     setCameraActive(false);
     setLandmarks(null);
+    setStream(null);
   }, []);
 
   useEffect(() => {
