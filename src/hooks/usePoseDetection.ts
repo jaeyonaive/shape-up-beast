@@ -127,7 +127,7 @@ export function usePoseDetection() {
       rafRef.current = requestAnimationFrame(processFrame);
 
     } catch (err: any) {
-      console.error('[FitMon] Camera/Pose error:', err);
+      console.error('[Fitnasia] Camera/Pose error:', err);
       if (err.name === 'NotAllowedError') {
         setError('Camera permission denied. Please allow camera access.');
       } else {
