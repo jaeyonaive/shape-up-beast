@@ -130,11 +130,7 @@ export default function Battle() {
 
     const isActive = gameActive || newState.calibrated;
     
-    // Debug logging
-    console.log('[BATTLE] phase:', newState.phase, 'repCount:', newState.repCount, 'prevRep:', prevRepRef.current, 'isActive:', isActive, 'calibrated:', newState.calibrated, 'gameActive:', gameActive);
-    
     if (newState.repCount > prevRepRef.current && isActive) {
-      console.log('[BATTLE] ✅ REP COUNTED! Applying damage. repCount:', newState.repCount);
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
 
