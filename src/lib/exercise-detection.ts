@@ -303,7 +303,7 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     state.formQuality = 'good';
 
     switch (state.exerciseType) {
-      case 'squats': state.phase = 'standing'; state.feedback = 'GO! Squat!'; break;
+      case 'high_knees': state.phase = 'hk_standing'; state.feedback = 'GO! High knees!'; break;
       case 'jumping_jacks': state.phase = 'closed'; state.feedback = 'GO! Jump!'; break;
       case 'lunges': state.phase = 'lunge_standing'; state.feedback = 'GO! Lunge!'; break;
     }
@@ -314,8 +314,8 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   const timeSinceRep = now - prevState._lastRepTime;
 
   switch (prevState.exerciseType) {
-    case 'squats':
-      return detectSquatPhase(landmarks, state, smoothedHipY, timeSinceRep, now);
+    case 'high_knees':
+      return detectHighKneesPhase(landmarks, state, timeSinceRep, now);
     case 'jumping_jacks':
       return detectJumpingJackPhase(landmarks, state, timeSinceRep, now);
     case 'lunges':
