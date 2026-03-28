@@ -205,7 +205,7 @@ export default function Battle() {
             Defeat the monster · Earn coins · Burn calories
           </p>
           <Button onClick={handleStart} disabled={isLoading} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
-            {isLoading ? 'Loading...' : 'Start Workout!'}
+            {isLoading ? '⏳ Loading...' : '📷 Start Workout!'}
           </Button>
         </div>
       </div>
