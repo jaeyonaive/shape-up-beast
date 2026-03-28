@@ -283,18 +283,20 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   const kneeAngle = getAvgKneeAngle(landmarks);
   const threshold = state._threshold;
   const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
+  const returnZone = state._standingHipY + (threshold - state._standingHipY) * 0.5;
 
-  // Require knee angle OR hip drop, but standing needs both signals
-  const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
+  const isDescending = kneeAngle < 152 || smoothedHipY > state._standingHipY + (threshold - state._standingHipY) * 0.55;
+  const isDeepEnough = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
+  const isRecovered = kneeAngle > 150 || smoothedHipY <= returnZone;
   const isStanding = kneeAngle > SQUAT_STANDING_ANGLE && smoothedHipY <= standingZone;
 
   if (state.phase === 'standing') {
-    if (isSquatting) {
+    if (isDeepEnough) {
       state.phase = 'at_bottom';
       state._reachedDepth = true;
       state.feedback = '⬇️ Good depth! Come back up!';
       state.formQuality = 'good';
-    } else if (smoothedHipY > threshold || kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD) {
+    } else if (isDescending) {
       state.phase = 'descending';
       state.feedback = '⬇️ Going down...';
       state.formQuality = 'neutral';
@@ -305,25 +307,31 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
     return state;
   }
 
-  if (state.phase === 'descending' || state.phase === 'at_bottom') {
-    if (isSquatting) {
+  if (state.phase === 'descending' || state.phase === 'at_bottom' || state.phase === 'ascending') {
+    if (isDeepEnough) {
       state._reachedDepth = true;
       state.phase = 'at_bottom';
       state.feedback = '⬇️ Good! Come back up!';
       state.formQuality = 'good';
+      return state;
     }
-    if (isStanding && state._reachedDepth && timeSinceRep >= REP_COOLDOWN_MS) {
+
+    if (state._reachedDepth && isRecovered && timeSinceRep >= REP_COOLDOWN_MS) {
       state.repCount += 1;
       state._lastRepTime = now;
       state._reachedDepth = false;
       state.phase = 'standing';
       state.feedback = `🎉 Rep ${state.repCount}!`;
       state.formQuality = 'good';
+      return state;
     }
+
+    state.phase = isStanding ? 'standing' : 'ascending';
+    state.feedback = '⬆️ Nice! Keep coming up!';
+    state.formQuality = 'good';
     return state;
   }
 
-  // Fallback reset
   state.phase = 'standing';
   return state;
 }
