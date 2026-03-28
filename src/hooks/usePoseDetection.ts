@@ -51,6 +51,7 @@ export function usePoseDetection() {
       ]);
 
       streamRef.current = cameraStream;
+      setStream(cameraStream);
       const video = videoRef.current;
       video.srcObject = cameraStream; // FIX: was using stale `stream` state
       await video.play();
