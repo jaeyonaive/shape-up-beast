@@ -322,9 +322,11 @@ export default function Battle() {
       {/* Bottom 40%: Camera with AR overlay */}
       <div className="relative flex-1 bg-black">
         <CameraOverlay stream={stream} landmarks={landmarks} />
-        <div className="absolute bottom-3 left-3 right-3 z-20">
+        
+        {/* Feedback overlay - always on top of camera area */}
+        <div className="absolute bottom-3 left-3 right-3 z-30">
           {!gameActive && (
-            <div className="p-3 rounded-xl bg-background/80 backdrop-blur-sm border border-border text-center">
+            <div className="p-3 rounded-xl bg-background/90 backdrop-blur-sm border border-border text-center shadow-lg">
               <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
               <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
               <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
@@ -333,15 +335,22 @@ export default function Battle() {
             </div>
           )}
           {gameActive && (
-            <div className={`p-2 rounded-xl text-center backdrop-blur-sm ${
-              displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
-              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
-              'bg-background/60 border border-border'
+            <div className={`p-2 rounded-xl text-center backdrop-blur-sm shadow-lg ${
+              displayState.formQuality === 'good' ? 'bg-green-500/30 border border-green-500/50' :
+              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/30 border border-yellow-500/50' :
+              'bg-background/80 border border-border'
             }`}>
-              <p className="font-body text-xs font-semibold text-foreground game-text-shadow">{displayState.feedback}</p>
+              <p className="font-body text-sm font-bold text-foreground game-text-shadow">{displayState.feedback}</p>
             </div>
           )}
         </div>
+
+        {/* No camera fallback */}
+        {!stream && !isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p className="font-body text-sm text-muted-foreground">Waiting for camera...</p>
+          </div>
+        )}
       </div>
 
       {/* Phase transition overlay */}
