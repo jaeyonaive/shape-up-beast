@@ -2,11 +2,11 @@ import { type Landmark, POSE, calculateAngle } from './pose-detection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type ExerciseType = 'squats' | 'jumping_jacks' | 'lunges';
+export type ExerciseType = 'high_knees' | 'jumping_jacks' | 'lunges';
 
 export type ExercisePhase =
   | 'waiting' | 'calibrating' | 'calibrating_squat'
-  | 'standing' | 'descending' | 'at_bottom' | 'ascending'  // squats
+  | 'hk_standing' | 'hk_knee_up' | 'hk_returning'          // high knees
   | 'closed' | 'opening' | 'open' | 'closing'              // jumping jacks
   | 'lunge_standing' | 'lunge_down' | 'lunge_returning';    // lunges
 
@@ -54,24 +54,23 @@ const MIN_HIP_DROP = 0.02;
 const SMOOTHING_WINDOW = 3;
 const REP_COOLDOWN_MS = 700;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 140;
-const SQUAT_STANDING_ANGLE = 158;
+const HIGH_KNEE_THRESHOLD = 0.03;
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
-  squats: 8,
+  high_knees: 6,
   jumping_jacks: 5,
   lunges: 12,
 };
 
 export const EXERCISE_LABELS: Record<ExerciseType, string> = {
-  squats: 'Squats',
+  high_knees: 'High Knees',
   jumping_jacks: 'Jumping Jacks',
   lunges: 'Lunges',
 };
 
 export const CALORIES_PER_REP: Record<ExerciseType, number> = {
-  squats: 0.32,
+  high_knees: 0.2,
   jumping_jacks: 0.15,
   lunges: 0.4,
 };
@@ -303,7 +302,7 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     state.formQuality = 'good';
 
     switch (state.exerciseType) {
-      case 'squats': state.phase = 'standing'; state.feedback = 'GO! Squat!'; break;
+      case 'high_knees': state.phase = 'hk_standing'; state.feedback = 'GO! High knees!'; break;
       case 'jumping_jacks': state.phase = 'closed'; state.feedback = 'GO! Jump!'; break;
       case 'lunges': state.phase = 'lunge_standing'; state.feedback = 'GO! Lunge!'; break;
     }
@@ -314,8 +313,8 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   const timeSinceRep = now - prevState._lastRepTime;
 
   switch (prevState.exerciseType) {
-    case 'squats':
-      return detectSquatPhase(landmarks, state, smoothedHipY, timeSinceRep, now);
+    case 'high_knees':
+      return detectHighKneesPhase(landmarks, state, timeSinceRep, now);
     case 'jumping_jacks':
       return detectJumpingJackPhase(landmarks, state, timeSinceRep, now);
     case 'lunges':
@@ -323,87 +322,51 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   }
 }
 
-// ─── Squat Detection (hip-primary, knee-secondary fallback) ─────────────────
+// ─── High Knees Detection ───────────────────────────────────────────────────
+// Detects when either knee rises above hip level (alternating legs)
 
-function getAvgKneeAngle(landmarks: Landmark[]): number {
-  const leftAngle = calculateAngle(
-    landmarks[POSE.LEFT_HIP], landmarks[POSE.LEFT_KNEE], landmarks[POSE.LEFT_ANKLE]
-  );
-  const rightAngle = calculateAngle(
-    landmarks[POSE.RIGHT_HIP], landmarks[POSE.RIGHT_KNEE], landmarks[POSE.RIGHT_ANKLE]
-  );
-  if (leftAngle > 0 && rightAngle > 0) return (leftAngle + rightAngle) / 2;
-  return leftAngle > 0 ? leftAngle : rightAngle;
+function getKneeHeight(landmarks: Landmark[], side: 'left' | 'right'): number {
+  const hip = side === 'left' ? landmarks[POSE.LEFT_HIP] : landmarks[POSE.RIGHT_HIP];
+  const knee = side === 'left' ? landmarks[POSE.LEFT_KNEE] : landmarks[POSE.RIGHT_KNEE];
+  if (!hip || !knee) return 0;
+  // How far knee is above hip (negative y = higher on screen)
+  return hip.y - knee.y;
 }
 
-function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
-  const kneesVis = hasKneesVisible(landmarks);
-  const kneeAngle = kneesVis ? getAvgKneeAngle(landmarks) : 999; // fallback: ignore knee if not visible
-  const threshold = state._threshold;
-  const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
-  const returnZone = state._standingHipY + (threshold - state._standingHipY) * 0.5;
-  const hipDrop = smoothedHipY - state._standingHipY;
+function detectHighKneesPhase(landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
+  const leftKneeUp = getKneeHeight(landmarks, 'left');
+  const rightKneeUp = getKneeHeight(landmarks, 'right');
 
-  // Primary: hip position. Secondary: knee angle (only if knees visible)
-  const hipDeep = hipDrop > (threshold - state._standingHipY) * 0.85;
-  const kneeDeep = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
-  const isDeepEnough = hipDeep || kneeDeep;
+  // Knee is "up" if it rises significantly (above ~hip level)
+  const kneeUpThreshold = 0.03; // normalized coords — small movement counts
+  const eitherKneeUp = leftKneeUp > kneeUpThreshold || rightKneeUp > kneeUpThreshold;
+  const bothKneesDown = leftKneeUp < 0.01 && rightKneeUp < 0.01;
 
-  const hipDescending = hipDrop > (threshold - state._standingHipY) * 0.3;
-  const kneeDescending = kneesVis && kneeAngle < 152;
-  const isDescending = hipDescending || kneeDescending;
-
-  const hipRecovered = smoothedHipY <= returnZone;
-  const kneeRecovered = kneesVis && kneeAngle > 152;
-  const isRecovered = hipRecovered && (!kneesVis || kneeRecovered);
-
-  const hipStanding = smoothedHipY <= standingZone;
-  const kneeStanding = !kneesVis || kneeAngle > SQUAT_STANDING_ANGLE;
-  const isStanding = hipStanding && kneeStanding;
-
-  if (state.phase === 'standing') {
-    if (isDeepEnough) {
-      state.phase = 'at_bottom';
-      state._reachedDepth = true;
-      state.feedback = 'Good depth! Come back up!';
+  if (state.phase === 'hk_standing') {
+    state.feedback = 'Lift your knees!';
+    state.formQuality = 'neutral';
+    if (eitherKneeUp) {
+      state.phase = 'hk_knee_up';
+      state.feedback = 'Knee up! Now switch!';
       state.formQuality = 'good';
-    } else if (isDescending) {
-      state.phase = 'descending';
-      state.feedback = 'Going down... keep going!';
-      state.formQuality = 'neutral';
-    } else {
-      state.feedback = 'Tracking active';
-      state.formQuality = 'neutral';
     }
     return state;
   }
 
-  if (state.phase === 'descending' || state.phase === 'at_bottom' || state.phase === 'ascending') {
-    if (isDeepEnough) {
-      state._reachedDepth = true;
-      state.phase = 'at_bottom';
-      state.feedback = 'Good! Come back up!';
-      state.formQuality = 'good';
-      return state;
-    }
-
-    if (state._reachedDepth && isRecovered && timeSinceRep >= REP_COOLDOWN_MS) {
+  if (state.phase === 'hk_knee_up') {
+    if (bothKneesDown && timeSinceRep >= REP_COOLDOWN_MS) {
       state.repCount += 1;
       state._lastRepTime = now;
-      state._reachedDepth = false;
-      state.phase = 'standing';
+      state.phase = 'hk_standing';
       state.feedback = `Rep ${state.repCount}!`;
       state.formQuality = 'good';
-      return state;
+    } else if (eitherKneeUp) {
+      state.feedback = 'Good! Bring it down!';
     }
-
-    state.phase = isStanding ? 'standing' : 'ascending';
-    state.feedback = 'Nice! Keep coming up!';
-    state.formQuality = 'good';
     return state;
   }
 
-  state.phase = 'standing';
+  state.phase = 'hk_standing';
   return state;
 }
 
