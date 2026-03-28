@@ -7,6 +7,7 @@ import { MONSTERS, loadGameState, saveGameState } from '@/lib/game-data';
 import { HPBar } from '@/components/game/HPBar';
 import { Button } from '@/components/ui/button';
 import battleBg from '@/assets/battle-bg.jpg';
+import battleBgForest from '@/assets/battle-bg-forest.jpg';
 import coinImg from '@/assets/coin.png';
 import monsterTutorial from '@/assets/monster-tutorial.png';
 import monsterBoss from '@/assets/monster-boss.png';
@@ -143,7 +144,7 @@ export default function Battle() {
     <div className="h-screen w-screen relative overflow-hidden flex flex-col">
       {/* Top 60%: Monster + battle scene */}
       <div className="relative" style={{ flex: '0 0 60%' }}>
-        <img src={battleBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <img src={monsterIndex === 0 ? battleBgForest : battleBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <button onClick={() => { stopCamera(); navigate('/'); }} className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
           <span className="text-foreground text-lg">✕</span>
         </button>
