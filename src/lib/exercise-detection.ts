@@ -334,12 +334,14 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
   const armSpread = getArmSpread(_landmarks);
   const legSpread = getLegSpread(_landmarks);
-  // JJ: primarily detect arms going up — legs spread is secondary
-  const isOpen = armSpread >= 1 && legSpread > 1.1;
+  
+  // Require BOTH arms up for open position (more accurate)
+  const armsUp = JJ_ARM_BOTH_REQUIRED ? armSpread >= 2 : armSpread >= 1;
+  const isOpen = armsUp && legSpread > 1.1;
   const isClosed = armSpread === 0 && legSpread < 1.3;
 
   if (state.phase === 'closed') {
-    state.feedback = '⭐ Raise arms & jump out!';
+    state.feedback = '⭐ Raise BOTH arms & jump out!';
     state.formQuality = 'neutral';
     if (isOpen) {
       state.phase = 'open';
@@ -361,9 +363,7 @@ function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, ti
     return state;
   }
 
-  // If in an unexpected phase for JJ, reset
   state.phase = 'closed';
-
   return state;
 }
 
