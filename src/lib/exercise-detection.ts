@@ -334,9 +334,8 @@ function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, ti
   const armSpread = getArmSpread(_landmarks);
   const legSpread = getLegSpread(_landmarks);
   
-  // Require BOTH arms up for open position (more accurate)
-  const armsUp = JJ_ARM_BOTH_REQUIRED ? armSpread >= 2 : armSpread >= 1;
-  const isOpen = armsUp && legSpread > 1.1;
+  // At least one arm up + legs spread = open
+  const isOpen = armSpread >= 1 && legSpread > 1.1;
   const isClosed = armSpread === 0 && legSpread < 1.3;
 
   if (state.phase === 'closed') {
