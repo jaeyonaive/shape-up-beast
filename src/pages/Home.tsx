@@ -56,7 +56,7 @@ export default function Home() {
           onClick={() => navigate('/battle/0')}
           className="w-full max-w-xs h-14 font-pixel text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow"
         >
-          🏋️ Start Squat Session
+          🏋️ Start 3-Phase Workout
         </Button>
 
         <div className="mt-auto pt-8">
