@@ -21,7 +21,7 @@ export default function Home() {
       <div className="relative z-10 flex-1 flex flex-col items-center px-4 pt-12 pb-8">
         {/* Title */}
         <h1 className="font-pixel text-2xl text-primary game-text-shadow mb-2 text-center">
-          FitMon
+          Fitnasia
         </h1>
         <p className="font-pixel text-[10px] text-foreground game-text-shadow mb-8 text-center">
           Battle Monsters with Fitness!
