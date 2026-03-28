@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { CameraOverlay } from '@/components/game/CameraOverlay';
 import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { HPBar } from '@/components/game/HPBar';
+import { BodySilhouette } from '@/components/game/BodySilhouette';
 import { useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import {
@@ -323,6 +324,12 @@ export default function Battle() {
       <div className="relative flex-1 bg-black">
         <CameraOverlay stream={stream} landmarks={landmarks} />
         
+        {/* Body silhouette guide - shown during calibration */}
+        <BodySilhouette
+          visible={!gameActive && started}
+          bodyDetected={displayState.bodyDetected}
+          kneesVisible={displayState.kneesVisible}
+        />
         {/* Feedback overlay - always on top of camera area */}
         <div className="absolute bottom-3 left-3 right-3 z-30">
           {!gameActive && (
