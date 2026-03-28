@@ -44,7 +44,7 @@ export interface WorkoutPhase {
 }
 
 export const WORKOUT_PHASES: WorkoutPhase[] = [
-  { exercise: 'high_knees', duration: 30, label: 'High Knees', emoji: '🦵' },
+  { exercise: 'squats', duration: 30, label: 'Squats', emoji: '🏋️' },
   { exercise: 'jumping_jacks', duration: 30, label: 'Jumping Jacks', emoji: '⭐' },
 ];
 

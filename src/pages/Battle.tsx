@@ -79,7 +79,7 @@ export default function Battle() {
             newExState.bodyDetected = true;
             newExState.calibrationProgress = 100;
             switch (nextPhase.exercise) {
-              case 'high_knees': newExState.phase = 'hk_standing'; break;
+              case 'squats': newExState.phase = 'standing'; break;
               case 'jumping_jacks': newExState.phase = 'closed'; break;
               case 'lunges': newExState.phase = 'lunge_standing'; break;
             }
