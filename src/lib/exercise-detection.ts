@@ -132,14 +132,16 @@ function smoothY(history: number[], newVal: number): { smoothed: number; history
 function getArmSpread(landmarks: Landmark[]): number {
   const lWrist = landmarks[POSE.LEFT_WRIST];
   const rWrist = landmarks[POSE.RIGHT_WRIST];
+  const lElbow = landmarks[POSE.LEFT_ELBOW];
+  const rElbow = landmarks[POSE.RIGHT_ELBOW];
   const lShoulder = landmarks[POSE.LEFT_SHOULDER];
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
-  if (!lWrist || !rWrist || !lShoulder || !rShoulder) return 0;
+  if (!lWrist || !rWrist || !lShoulder || !rShoulder || !lElbow || !rElbow) return 0;
 
-  // Check if wrists are above shoulders (arms up)
-  const lUp = lWrist.y < lShoulder.y;
-  const rUp = rWrist.y < rShoulder.y;
-  return (lUp ? 1 : 0) + (rUp ? 1 : 0); // 0=down, 1=one up, 2=both up
+  // Arms up: wrist OR elbow above shoulder level
+  const lUp = lWrist.y < lShoulder.y || lElbow.y < lShoulder.y;
+  const rUp = rWrist.y < rShoulder.y || rElbow.y < rShoulder.y;
+  return (lUp ? 1 : 0) + (rUp ? 1 : 0);
 }
 
 function getLegSpread(landmarks: Landmark[]): number {
@@ -151,7 +153,7 @@ function getLegSpread(landmarks: Landmark[]): number {
 
   const hipWidth = Math.abs(rHip.x - lHip.x);
   const ankleWidth = Math.abs(rAnkle.x - lAnkle.x);
-  return hipWidth > 0 ? ankleWidth / hipWidth : 0; // ratio: >1.5 = spread
+  return hipWidth > 0 ? ankleWidth / hipWidth : 0;
 }
 
 // ─── Lunge helpers ───────────────────────────────────────────────────────────
