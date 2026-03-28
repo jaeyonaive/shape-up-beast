@@ -52,8 +52,8 @@ const MIN_HIP_DROP = 0.02;
 const SMOOTHING_WINDOW = 2;
 const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 140; // degrees — below this = squatting
-const SQUAT_STANDING_ANGLE = 155;       // degrees — above this = standing
+const SQUAT_KNEE_ANGLE_THRESHOLD = 145; // degrees — below this = squatting
+const SQUAT_STANDING_ANGLE = 158;       // degrees — above this = standing
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
