@@ -8,6 +8,7 @@ import {
   createExerciseState, detectExercise, DAMAGE_MAP, EXERCISE_LABELS, CALORIES_PER_REP,
   type ExerciseState, type ExerciseType,
 } from '@/lib/exercise-detection';
+import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
   WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
@@ -41,6 +42,7 @@ export default function Battle() {
   const [gameActive, setGameActive] = useState(false);
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
+  const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
 
   // Exercise detection state
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
@@ -63,26 +65,33 @@ export default function Battle() {
             setWorkoutComplete(true);
             return 0;
           }
-          setPhaseIndex(nextIdx);
-          // Reset exercise state for new phase
-          const newExState = createExerciseState(WORKOUT_PHASES[nextIdx].exercise);
-          // Skip calibration if body already detected
-          newExState.calibrated = true;
-          newExState.bodyDetected = true;
-          newExState.calibrationProgress = 100;
-          switch (WORKOUT_PHASES[nextIdx].exercise) {
-            case 'squats': newExState.phase = 'standing'; break;
-            case 'jumping_jacks': newExState.phase = 'closed'; break;
-            case 'lunges': newExState.phase = 'lunge_standing'; break;
-          }
-          // Copy calibration data from current state
-          newExState._standingHipY = exerciseStateRef.current._standingHipY;
-          newExState._squatHipY = exerciseStateRef.current._squatHipY;
-          newExState._threshold = exerciseStateRef.current._threshold;
-          exerciseStateRef.current = newExState;
-          prevRepRef.current = 0;
-          setDisplayState({ ...newExState });
-          return WORKOUT_PHASES[nextIdx].duration;
+          
+          // Show transition overlay
+          const nextPhase = WORKOUT_PHASES[nextIdx];
+          setPhaseTransition({ label: nextPhase.label, emoji: nextPhase.emoji });
+          
+          // After 3s countdown, start new phase
+          setTimeout(() => {
+            setPhaseIndex(nextIdx);
+            const newExState = createExerciseState(nextPhase.exercise);
+            newExState.calibrated = true;
+            newExState.bodyDetected = true;
+            newExState.calibrationProgress = 100;
+            switch (nextPhase.exercise) {
+              case 'squats': newExState.phase = 'standing'; break;
+              case 'jumping_jacks': newExState.phase = 'closed'; break;
+              case 'lunges': newExState.phase = 'lunge_standing'; break;
+            }
+            newExState._standingHipY = exerciseStateRef.current._standingHipY;
+            newExState._squatHipY = exerciseStateRef.current._squatHipY;
+            newExState._threshold = exerciseStateRef.current._threshold;
+            exerciseStateRef.current = newExState;
+            prevRepRef.current = 0;
+            setDisplayState({ ...newExState });
+            setPhaseTransition(null);
+          }, 3000);
+          
+          return nextPhase.duration;
         }
         return t - 1;
       });
@@ -339,6 +348,11 @@ export default function Battle() {
           )}
         </div>
       </div>
+
+      {/* Phase transition overlay */}
+      {phaseTransition && (
+        <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
+      )}
 
       {/* Loading overlay */}
       {isLoading && (
