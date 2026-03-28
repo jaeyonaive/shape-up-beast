@@ -348,6 +348,11 @@ export default function Battle() {
         </div>
       </div>
 
+      {/* Phase transition overlay */}
+      {phaseTransition && (
+        <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
+      )}
+
       {/* Loading overlay */}
       {isLoading && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80">
