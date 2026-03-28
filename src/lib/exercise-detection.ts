@@ -345,10 +345,8 @@ function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, ti
     return state;
   }
 
-  // If in an unexpected phase, reset to closed
-  if (state.phase !== 'closed' && state.phase !== 'open') {
-    state.phase = 'closed';
-  }
+  // If in an unexpected phase for JJ, reset
+  state.phase = 'closed';
 
   return state;
 }
