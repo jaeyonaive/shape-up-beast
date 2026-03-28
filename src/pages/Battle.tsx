@@ -42,8 +42,6 @@ export default function Battle() {
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
   const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
-  const [sessionOver, setSessionOver] = useState(false);
-  const [monsterDefeated, setMonsterDefeated] = useState(false);
 
   // Exercise detection state
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
