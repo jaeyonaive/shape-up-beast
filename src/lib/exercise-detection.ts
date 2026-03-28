@@ -249,9 +249,7 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   if (prevState.phase === 'calibrating') {
     // Knees not required — just helpful hint
     if (!kneesVis) {
-      // Don't block, just note it
       state.feedback = 'Knees not visible — detection may use hip position only';
-    }
     }
 
     const elapsed = now - prevState._calibStartTime;
