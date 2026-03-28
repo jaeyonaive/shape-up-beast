@@ -118,10 +118,10 @@ function getMidHipY(landmarks: Landmark[]): number {
 }
 
 function hasFullBody(landmarks: Landmark[]): boolean {
+  // Only require shoulders + hips — knees are optional (close to camera)
   const required = [
     POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER,
     POSE.LEFT_HIP, POSE.RIGHT_HIP,
-    POSE.LEFT_KNEE, POSE.RIGHT_KNEE,
   ];
   return required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.1);
 }
@@ -231,13 +231,6 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     const frames = (prevState._bodyDetectFrames || 0) + 1;
     state._bodyDetectFrames = frames;
     if (frames >= BODY_DETECT_FRAMES) {
-      if (!kneesVis) {
-        state.feedback = 'Make sure your whole body is visible, especially knees';
-        state.formQuality = 'needs_work';
-        state.calibrationProgress = 15;
-        state._bodyDetectFrames = 0; // reset, wait for knees
-        return state;
-      }
       state.phase = 'calibrating';
       state._calibStartTime = now;
       state._calibMinHipY = smoothedHipY;
@@ -254,10 +247,9 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
   // ═══ CALIBRATING: capture standing position, then ask for one squat ═══
   if (prevState.phase === 'calibrating') {
+    // Knees not required — just helpful hint
     if (!kneesVis) {
-      state.feedback = 'Make sure your knees are visible in the frame';
-      state.formQuality = 'needs_work';
-      return state;
+      state.feedback = 'Knees not visible — detection may use hip position only';
     }
 
     const elapsed = now - prevState._calibStartTime;
