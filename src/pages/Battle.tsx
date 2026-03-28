@@ -256,28 +256,13 @@ export default function Battle() {
           <span className="text-foreground text-lg">✕</span>
         </button>
 
-        {/* Top bar: Exercise label (left) + Timer (right) */}
-        <div className="absolute top-3 left-3 right-14 z-30 flex items-start justify-between gap-2">
-          {/* Exercise label + progress dots */}
-          <div className="game-panel px-3 py-2 flex items-center gap-2">
-            <span className="text-xl">{currentPhase.emoji}</span>
-            <div>
-              <span className="font-pixel text-xs text-primary">{currentPhase.label}</span>
-              <div className="flex gap-1 mt-1">
-                {WORKOUT_PHASES.map((_, i) => (
-                  <div key={i} className={`w-2 h-2 rounded-full border ${
-                    i < phaseIndex ? 'bg-primary border-primary' :
-                    i === phaseIndex ? 'bg-primary/50 border-primary animate-pulse' :
-                    'bg-muted border-border'
-                  }`} />
-                ))}
-              </div>
-            </div>
-          </div>
+        {/* HP Bar - top, full width */}
+        <div className="absolute top-3 left-3 right-14 z-30">
+          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
         </div>
 
-        {/* Timer - right side, below close button */}
-        <div className="absolute top-14 right-3 z-30">
+        {/* Timer - right side */}
+        <div className="absolute top-16 right-3 z-30">
           <div className="game-panel px-3 py-2 text-center">
             <span className="font-pixel text-[10px] text-muted-foreground block">TIME</span>
             <span className="font-pixel text-lg text-foreground game-text-shadow">{phaseTimeLeft}s</span>
@@ -285,16 +270,11 @@ export default function Battle() {
         </div>
 
         {/* Rep counter - right side, below timer */}
-        <div className="absolute top-28 right-3 z-30">
+        <div className="absolute top-[7.5rem] right-3 z-30">
           <div className="game-panel px-3 py-2 text-center">
             <span className="font-pixel text-[10px] text-muted-foreground block">REPS</span>
             <span className="font-pixel text-lg text-primary game-text-shadow">{displayState.repCount}</span>
           </div>
-        </div>
-
-        {/* HP Bar - top area, full width, highest z-index */}
-        <div className="absolute top-14 left-3 right-16 z-30">
-          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
         </div>
 
         {/* Monster - centered in battle area */}
