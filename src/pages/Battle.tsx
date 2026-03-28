@@ -299,9 +299,9 @@ export default function Battle() {
 
         {/* Bottom stats */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
-          <div className="flex items-center gap-2"><span className="font-pixel text-xs text-muted-foreground">REPS</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
-          <div className="flex items-center gap-2"><span className="font-pixel text-xs text-muted-foreground">STREAK</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
-          <div className="flex items-center gap-2"><span className="font-pixel text-[10px] text-muted-foreground">{calories} kcal</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">💪</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">🔥</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xs">🔥</span><span className="font-pixel text-[10px] text-muted-foreground game-text-shadow">{calories} kcal</span></div>
           <div className="flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-6 h-6" /><span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span></div>
         </div>
       </div>
