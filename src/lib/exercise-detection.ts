@@ -2,11 +2,11 @@ import { type Landmark, POSE, calculateAngle } from './pose-detection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type ExerciseType = 'squats' | 'jumping_jacks' | 'lunges';
+export type ExerciseType = 'high_knees' | 'jumping_jacks' | 'lunges';
 
 export type ExercisePhase =
   | 'waiting' | 'calibrating' | 'calibrating_squat'
-  | 'standing' | 'descending' | 'at_bottom' | 'ascending'  // squats
+  | 'hk_standing' | 'hk_knee_up' | 'hk_returning'          // high knees
   | 'closed' | 'opening' | 'open' | 'closing'              // jumping jacks
   | 'lunge_standing' | 'lunge_down' | 'lunge_returning';    // lunges
 
