@@ -246,37 +246,30 @@ export default function Battle() {
           <span className="text-foreground text-lg">✕</span>
         </button>
 
-        {/* Phase indicator + timer — large banner so user knows the exercise */}
-        <div className="absolute top-4 left-3 right-14 z-20">
-          <div className={`game-panel px-4 py-2.5 flex items-center justify-between ${
-            currentPhase.exercise === 'squats' ? 'border-l-4 border-l-primary' : 'border-l-4 border-l-secondary'
-          }`}>
-            <div className="flex flex-col">
-              <span className="font-pixel text-sm text-foreground game-text-shadow">{currentPhase.emoji} {currentPhase.label}</span>
-              <span className="font-body text-[10px] text-muted-foreground mt-0.5">
-                {currentPhase.exercise === 'squats' ? 'Stand → squat → stand' : 'Arms up + legs out → close'}
-              </span>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="font-pixel text-lg text-foreground">{phaseTimeLeft}s</span>
-              <span className="font-pixel text-[10px] text-primary">{displayState.repCount} reps</span>
-            </div>
+        {/* Phase indicator + timer */}
+        <div className="absolute top-4 left-3 right-14 z-20 flex items-center justify-between gap-2">
+          <div className="game-panel px-3 py-1.5 flex items-center gap-2">
+            <span className="text-lg">{currentPhase.emoji}</span>
+            <span className="font-pixel text-[10px] text-primary">{currentPhase.label}</span>
+          </div>
+          <div className="game-panel px-3 py-1.5">
+            <span className="font-pixel text-xs text-foreground">{phaseTimeLeft}s</span>
           </div>
         </div>
 
         {/* Phase progress dots */}
-        <div className="absolute top-[72px] left-1/2 -translate-x-1/2 z-20 flex gap-2">
-          {WORKOUT_PHASES.map((p, i) => (
-            <div key={i} className={`px-2 py-0.5 rounded-full text-[8px] font-pixel ${
-              i < phaseIndex ? 'bg-primary text-primary-foreground' :
-              i === phaseIndex ? 'bg-primary/50 text-foreground animate-pulse border border-primary' :
-              'bg-muted text-muted-foreground border border-border'
-            }`}>{p.label}</div>
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+          {WORKOUT_PHASES.map((_, i) => (
+            <div key={i} className={`w-3 h-3 rounded-full border-2 ${
+              i < phaseIndex ? 'bg-primary border-primary' :
+              i === phaseIndex ? 'bg-primary/50 border-primary animate-pulse' :
+              'bg-muted border-border'
+            }`} />
           ))}
         </div>
 
         {/* Monster HP Bar */}
-        <div className="absolute top-24 left-3 right-3 z-20">
+        <div className="absolute top-20 left-3 right-3 z-20">
           <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
         </div>
 
@@ -292,7 +285,7 @@ export default function Battle() {
 
         {/* Combo text */}
         {comboText && (
-          <div className="absolute top-40 left-1/2 -translate-x-1/2 z-20 animate-bounce">
+          <div className="absolute top-36 left-1/2 -translate-x-1/2 z-20 animate-bounce">
             <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
           </div>
         )}
@@ -306,8 +299,10 @@ export default function Battle() {
 
         {/* Bottom stats */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
-          <div className="game-panel px-2 py-1"><span className="font-pixel text-[10px] text-muted-foreground">{calories} kcal</span></div>
-          <div className="game-panel px-2 py-1 flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-5 h-5" /><span className="font-pixel text-xs text-game-gold">{coins}G</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">💪</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">🔥</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xs">🔥</span><span className="font-pixel text-[10px] text-muted-foreground game-text-shadow">{calories} kcal</span></div>
+          <div className="flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-6 h-6" /><span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span></div>
         </div>
       </div>
 
