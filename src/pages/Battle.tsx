@@ -130,11 +130,7 @@ export default function Battle() {
 
     const isActive = gameActive || newState.calibrated;
     
-    // Debug logging
-    console.log('[BATTLE] phase:', newState.phase, 'repCount:', newState.repCount, 'prevRep:', prevRepRef.current, 'isActive:', isActive, 'calibrated:', newState.calibrated, 'gameActive:', gameActive);
-    
     if (newState.repCount > prevRepRef.current && isActive) {
-      console.log('[BATTLE] ✅ REP COUNTED! Applying damage. repCount:', newState.repCount);
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
 
@@ -256,42 +252,54 @@ export default function Battle() {
         <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
 
         {/* Close button */}
-        <button onClick={handleEndSession} className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
+        <button onClick={handleEndSession} className="absolute top-3 right-3 z-40 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
           <span className="text-foreground text-lg">✕</span>
         </button>
 
-        {/* Phase indicator + timer - large and prominent */}
-        <div className="absolute top-4 left-3 right-14 z-30">
-          <div className="game-panel px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{currentPhase.emoji}</span>
-              <div>
-                <span className="font-pixel text-sm text-primary block">{currentPhase.label}</span>
-                <div className="flex gap-1.5 mt-1">
-                  {WORKOUT_PHASES.map((_, i) => (
-                    <div key={i} className={`w-2.5 h-2.5 rounded-full border-2 ${
-                      i < phaseIndex ? 'bg-primary border-primary' :
-                      i === phaseIndex ? 'bg-primary/50 border-primary animate-pulse' :
-                      'bg-muted border-border'
-                    }`} />
-                  ))}
-                </div>
+        {/* Top bar: Exercise label (left) + Timer (right) */}
+        <div className="absolute top-3 left-3 right-14 z-30 flex items-start justify-between gap-2">
+          {/* Exercise label + progress dots */}
+          <div className="game-panel px-3 py-2 flex items-center gap-2">
+            <span className="text-xl">{currentPhase.emoji}</span>
+            <div>
+              <span className="font-pixel text-xs text-primary">{currentPhase.label}</span>
+              <div className="flex gap-1 mt-1">
+                {WORKOUT_PHASES.map((_, i) => (
+                  <div key={i} className={`w-2 h-2 rounded-full border ${
+                    i < phaseIndex ? 'bg-primary border-primary' :
+                    i === phaseIndex ? 'bg-primary/50 border-primary animate-pulse' :
+                    'bg-muted border-border'
+                  }`} />
+                ))}
               </div>
             </div>
-            <div className="text-right">
-              <span className="font-pixel text-xl text-foreground game-text-shadow">{phaseTimeLeft}s</span>
-            </div>
           </div>
+        </div>
+
+        {/* Timer - right side, below close button */}
+        <div className="absolute top-14 right-3 z-30">
+          <div className="game-panel px-3 py-2 text-center">
+            <span className="font-pixel text-[10px] text-muted-foreground block">TIME</span>
+            <span className="font-pixel text-lg text-foreground game-text-shadow">{phaseTimeLeft}s</span>
+          </div>
+        </div>
+
+        {/* Rep counter - right side, below timer */}
+        <div className="absolute top-28 right-3 z-30">
+          <div className="game-panel px-3 py-2 text-center">
+            <span className="font-pixel text-[10px] text-muted-foreground block">REPS</span>
+            <span className="font-pixel text-lg text-primary game-text-shadow">{displayState.repCount}</span>
+          </div>
+        </div>
+
+        {/* HP Bar - top area, full width, highest z-index */}
+        <div className="absolute top-14 left-3 right-16 z-30">
+          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
         </div>
 
         {/* Monster - centered in battle area */}
         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
           <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
-        </div>
-
-        {/* HP Bar - positioned above the monster */}
-        <div className="absolute bottom-[340px] left-3 right-3 z-30">
-          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
         </div>
 
         {/* Damage text */}
@@ -315,12 +323,19 @@ export default function Battle() {
           </div>
         )}
 
-        {/* Bottom stats */}
+        {/* Bottom stats bar */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
-          <div className="flex items-center gap-2"><span className="text-xl">💪</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
-          <div className="flex items-center gap-2"><span className="text-xl">🔥</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
-          <div className="flex items-center gap-2"><span className="text-xs">🔥</span><span className="font-pixel text-[10px] text-muted-foreground game-text-shadow">{calories} kcal</span></div>
-          <div className="flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-6 h-6" /><span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span></div>
+          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
+            <span className="text-lg">🔥</span>
+            <span className="font-pixel text-xs text-foreground game-text-shadow">{streak}</span>
+          </div>
+          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
+            <span className="font-pixel text-[10px] text-muted-foreground">{calories} kcal</span>
+          </div>
+          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
+            <img src={coinImg} alt="coins" className="w-5 h-5" />
+            <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
+          </div>
         </div>
       </div>
 
