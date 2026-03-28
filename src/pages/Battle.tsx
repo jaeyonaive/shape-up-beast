@@ -251,26 +251,28 @@ export default function Battle() {
           <span className="text-foreground text-lg">✕</span>
         </button>
 
-        {/* Phase indicator + timer */}
-        <div className="absolute top-4 left-3 right-14 z-20 flex items-center justify-between gap-2">
-          <div className="game-panel px-3 py-1.5 flex items-center gap-2">
-            <span className="text-lg">{currentPhase.emoji}</span>
-            <span className="font-pixel text-[10px] text-primary">{currentPhase.label}</span>
+        {/* Phase indicator + timer - large and prominent */}
+        <div className="absolute top-4 left-3 right-14 z-30">
+          <div className="game-panel px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{currentPhase.emoji}</span>
+              <div>
+                <span className="font-pixel text-sm text-primary block">{currentPhase.label}</span>
+                <div className="flex gap-1.5 mt-1">
+                  {WORKOUT_PHASES.map((_, i) => (
+                    <div key={i} className={`w-2.5 h-2.5 rounded-full border-2 ${
+                      i < phaseIndex ? 'bg-primary border-primary' :
+                      i === phaseIndex ? 'bg-primary/50 border-primary animate-pulse' :
+                      'bg-muted border-border'
+                    }`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="font-pixel text-xl text-foreground game-text-shadow">{phaseTimeLeft}s</span>
+            </div>
           </div>
-          <div className="game-panel px-3 py-1.5">
-            <span className="font-pixel text-xs text-foreground">{phaseTimeLeft}s</span>
-          </div>
-        </div>
-
-        {/* Phase progress dots */}
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 flex gap-2">
-          {WORKOUT_PHASES.map((_, i) => (
-            <div key={i} className={`w-3 h-3 rounded-full border-2 ${
-              i < phaseIndex ? 'bg-primary border-primary' :
-              i === phaseIndex ? 'bg-primary/50 border-primary animate-pulse' :
-              'bg-muted border-border'
-            }`} />
-          ))}
         </div>
 
         {/* Monster - centered in battle area */}
