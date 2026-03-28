@@ -42,7 +42,7 @@ export function usePoseDetection() {
       // Start camera and model load in parallel
       const [cameraStream, vision] = await Promise.all([
         navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         }),
         FilesetResolver.forVisionTasks(
