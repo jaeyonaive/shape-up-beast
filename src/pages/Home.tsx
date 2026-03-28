@@ -54,7 +54,7 @@ export default function Home() {
 
         <Button
           onClick={() => navigate('/battle/0')}
-          className="w-full max-w-xs h-14 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow"
+          className="w-full max-w-xs h-14 font-pixel text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow"
         >
           🏋️ Start Squat Session
         </Button>
