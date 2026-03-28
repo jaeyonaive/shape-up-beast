@@ -55,7 +55,7 @@ export function usePoseDetection() {
       const video = videoRef.current;
       video.srcObject = cameraStream; // FIX: was using stale `stream` state
       await video.play();
-      console.log('[FitMon] Camera started:', video.videoWidth, 'x', video.videoHeight);
+      console.log('[Fitnasia] Camera started:', video.videoWidth, 'x', video.videoHeight);
 
       // Use LITE model — try GPU first, fall back to CPU
       let poseLandmarker: PoseLandmarker;
