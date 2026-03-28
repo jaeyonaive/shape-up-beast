@@ -247,10 +247,11 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
   // ═══ CALIBRATING: capture standing position, then ask for one squat ═══
   if (prevState.phase === 'calibrating') {
+    // Knees not required — just helpful hint
     if (!kneesVis) {
-      state.feedback = 'Make sure your knees are visible in the frame';
-      state.formQuality = 'needs_work';
-      return state;
+      // Don't block, just note it
+      state.feedback = 'Knees not visible — detection may use hip position only';
+    }
     }
 
     const elapsed = now - prevState._calibStartTime;
