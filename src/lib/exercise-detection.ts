@@ -264,14 +264,36 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   }
 }
 
-// ─── Squat Detection ─────────────────────────────────────────────────────────
+// ─── Squat Detection (uses knee angle + hip Y) ──────────────────────────────
+
+function getAvgKneeAngle(landmarks: Landmark[]): number {
+  const leftAngle = calculateAngle(
+    landmarks[POSE.LEFT_HIP], landmarks[POSE.LEFT_KNEE], landmarks[POSE.LEFT_ANKLE]
+  );
+  const rightAngle = calculateAngle(
+    landmarks[POSE.RIGHT_HIP], landmarks[POSE.RIGHT_KNEE], landmarks[POSE.RIGHT_ANKLE]
+  );
+  // Use whichever is valid; average if both are
+  if (leftAngle > 0 && rightAngle > 0) return (leftAngle + rightAngle) / 2;
+  return leftAngle > 0 ? leftAngle : rightAngle;
+}
 
 function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
+  const kneeAngle = getAvgKneeAngle(landmarks);
   const threshold = state._threshold;
   const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
 
+  // Use BOTH knee angle and hip position for accuracy
+  const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD && smoothedHipY > threshold;
+  const isStanding = kneeAngle > SQUAT_STANDING_ANGLE && smoothedHipY <= standingZone;
+
   if (state.phase === 'standing') {
-    if (smoothedHipY > threshold) {
+    if (isSquatting) {
+      state.phase = 'at_bottom';
+      state._reachedDepth = true;
+      state.feedback = '⬇️ Good depth! Come back up!';
+      state.formQuality = 'good';
+    } else if (smoothedHipY > threshold || kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD) {
       state.phase = 'descending';
       state.feedback = '⬇️ Going down...';
       state.formQuality = 'neutral';
@@ -283,13 +305,13 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   }
 
   if (state.phase === 'descending' || state.phase === 'at_bottom') {
-    if (smoothedHipY > threshold) {
+    if (isSquatting) {
       state._reachedDepth = true;
       state.phase = 'at_bottom';
       state.feedback = '⬇️ Good! Come back up!';
       state.formQuality = 'good';
     }
-    if (smoothedHipY <= standingZone && state._reachedDepth && timeSinceRep >= REP_COOLDOWN_MS) {
+    if (isStanding && state._reachedDepth && timeSinceRep >= REP_COOLDOWN_MS) {
       state.repCount += 1;
       state._lastRepTime = now;
       state._reachedDepth = false;
@@ -300,20 +322,8 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
     return state;
   }
 
-  if (state.phase === 'ascending') {
-    if (smoothedHipY <= standingZone && state._reachedDepth && timeSinceRep >= REP_COOLDOWN_MS) {
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state._reachedDepth = false;
-      state.phase = 'standing';
-      state.feedback = `🎉 Rep ${state.repCount}!`;
-      state.formQuality = 'good';
-    } else {
-      state.feedback = '⬆️ Almost there!';
-    }
-    return state;
-  }
-
+  // Fallback reset
+  state.phase = 'standing';
   return state;
 }
 
