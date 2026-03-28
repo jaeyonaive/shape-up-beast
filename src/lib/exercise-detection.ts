@@ -231,13 +231,6 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     const frames = (prevState._bodyDetectFrames || 0) + 1;
     state._bodyDetectFrames = frames;
     if (frames >= BODY_DETECT_FRAMES) {
-      if (!kneesVis) {
-        state.feedback = 'Make sure your whole body is visible, especially knees';
-        state.formQuality = 'needs_work';
-        state.calibrationProgress = 15;
-        state._bodyDetectFrames = 0; // reset, wait for knees
-        return state;
-      }
       state.phase = 'calibrating';
       state._calibStartTime = now;
       state._calibMinHipY = smoothedHipY;
