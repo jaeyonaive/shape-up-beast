@@ -285,9 +285,9 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
   const returnZone = state._standingHipY + (threshold - state._standingHipY) * 0.5;
 
-  const isDescending = kneeAngle < 152 || smoothedHipY > state._standingHipY + (threshold - state._standingHipY) * 0.55;
-  const isDeepEnough = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
-  const isRecovered = kneeAngle > 150 || smoothedHipY <= returnZone;
+  const isDescending = kneeAngle < 152 && smoothedHipY > state._standingHipY + (threshold - state._standingHipY) * 0.3;
+  const isDeepEnough = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD && smoothedHipY > threshold * 0.85;
+  const isRecovered = kneeAngle > 152 && smoothedHipY <= returnZone;
   const isStanding = kneeAngle > SQUAT_STANDING_ANGLE && smoothedHipY <= standingZone;
 
   if (state.phase === 'standing') {
