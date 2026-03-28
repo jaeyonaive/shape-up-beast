@@ -197,7 +197,7 @@ export default function Battle() {
           <div className="space-y-1 mb-4">
             {WORKOUT_PHASES.map((p, i) => (
               <p key={i} className="font-body text-sm text-muted-foreground">
-                {p.label} — {p.duration}s
+                {p.emoji} {p.label} — {p.duration}s
               </p>
             ))}
           </div>
@@ -205,7 +205,7 @@ export default function Battle() {
             Defeat the monster · Earn coins · Burn calories
           </p>
           <Button onClick={handleStart} disabled={isLoading} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
-            {isLoading ? 'Loading...' : 'Start Workout!'}
+            {isLoading ? '⏳ Loading...' : '📷 Start Workout!'}
           </Button>
         </div>
       </div>
@@ -217,7 +217,7 @@ export default function Battle() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
         <div className="game-panel p-8 max-w-sm w-full text-center slide-up">
-          <div className="text-6xl mb-4">VICTORY</div>
+          <div className="text-6xl mb-4">🏆</div>
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">Workout Complete!</h2>
           <div className="space-y-2 mb-6">
             <p className="font-body text-sm text-foreground">Score: <span className="font-pixel text-primary">{score}</span></p>
@@ -227,8 +227,8 @@ export default function Battle() {
             <p className="font-body text-sm text-game-gold">+{coins}G earned!</p>
           </div>
           <div className="flex flex-col gap-3">
-            <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">Home</Button>
-            <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">Go Again</Button>
+            <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">🏠 Home</Button>
+            <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">🔄 Go Again</Button>
           </div>
         </div>
       </div>
@@ -299,9 +299,9 @@ export default function Battle() {
 
         {/* Bottom stats */}
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
-          <div className="flex items-center gap-2"><span className="font-pixel text-xs text-muted-foreground">REPS</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
-          <div className="flex items-center gap-2"><span className="font-pixel text-xs text-muted-foreground">STREAK</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
-          <div className="flex items-center gap-2"><span className="font-pixel text-[10px] text-muted-foreground">{calories} kcal</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">💪</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">🔥</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xs">🔥</span><span className="font-pixel text-[10px] text-muted-foreground game-text-shadow">{calories} kcal</span></div>
           <div className="flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-6 h-6" /><span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span></div>
         </div>
       </div>
