@@ -323,87 +323,51 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   }
 }
 
-// ─── Squat Detection (hip-primary, knee-secondary fallback) ─────────────────
+// ─── High Knees Detection ───────────────────────────────────────────────────
+// Detects when either knee rises above hip level (alternating legs)
 
-function getAvgKneeAngle(landmarks: Landmark[]): number {
-  const leftAngle = calculateAngle(
-    landmarks[POSE.LEFT_HIP], landmarks[POSE.LEFT_KNEE], landmarks[POSE.LEFT_ANKLE]
-  );
-  const rightAngle = calculateAngle(
-    landmarks[POSE.RIGHT_HIP], landmarks[POSE.RIGHT_KNEE], landmarks[POSE.RIGHT_ANKLE]
-  );
-  if (leftAngle > 0 && rightAngle > 0) return (leftAngle + rightAngle) / 2;
-  return leftAngle > 0 ? leftAngle : rightAngle;
+function getKneeHeight(landmarks: Landmark[], side: 'left' | 'right'): number {
+  const hip = side === 'left' ? landmarks[POSE.LEFT_HIP] : landmarks[POSE.RIGHT_HIP];
+  const knee = side === 'left' ? landmarks[POSE.LEFT_KNEE] : landmarks[POSE.RIGHT_KNEE];
+  if (!hip || !knee) return 0;
+  // How far knee is above hip (negative y = higher on screen)
+  return hip.y - knee.y;
 }
 
-function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
-  const kneesVis = hasKneesVisible(landmarks);
-  const kneeAngle = kneesVis ? getAvgKneeAngle(landmarks) : 999; // fallback: ignore knee if not visible
-  const threshold = state._threshold;
-  const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
-  const returnZone = state._standingHipY + (threshold - state._standingHipY) * 0.5;
-  const hipDrop = smoothedHipY - state._standingHipY;
+function detectHighKneesPhase(landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
+  const leftKneeUp = getKneeHeight(landmarks, 'left');
+  const rightKneeUp = getKneeHeight(landmarks, 'right');
 
-  // Primary: hip position. Secondary: knee angle (only if knees visible)
-  const hipDeep = hipDrop > (threshold - state._standingHipY) * 0.85;
-  const kneeDeep = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
-  const isDeepEnough = hipDeep || kneeDeep;
+  // Knee is "up" if it rises significantly (above ~hip level)
+  const kneeUpThreshold = 0.03; // normalized coords — small movement counts
+  const eitherKneeUp = leftKneeUp > kneeUpThreshold || rightKneeUp > kneeUpThreshold;
+  const bothKneesDown = leftKneeUp < 0.01 && rightKneeUp < 0.01;
 
-  const hipDescending = hipDrop > (threshold - state._standingHipY) * 0.3;
-  const kneeDescending = kneesVis && kneeAngle < 152;
-  const isDescending = hipDescending || kneeDescending;
-
-  const hipRecovered = smoothedHipY <= returnZone;
-  const kneeRecovered = kneesVis && kneeAngle > 152;
-  const isRecovered = hipRecovered && (!kneesVis || kneeRecovered);
-
-  const hipStanding = smoothedHipY <= standingZone;
-  const kneeStanding = !kneesVis || kneeAngle > SQUAT_STANDING_ANGLE;
-  const isStanding = hipStanding && kneeStanding;
-
-  if (state.phase === 'standing') {
-    if (isDeepEnough) {
-      state.phase = 'at_bottom';
-      state._reachedDepth = true;
-      state.feedback = 'Good depth! Come back up!';
+  if (state.phase === 'hk_standing') {
+    state.feedback = 'Lift your knees!';
+    state.formQuality = 'neutral';
+    if (eitherKneeUp) {
+      state.phase = 'hk_knee_up';
+      state.feedback = 'Knee up! Now switch!';
       state.formQuality = 'good';
-    } else if (isDescending) {
-      state.phase = 'descending';
-      state.feedback = 'Going down... keep going!';
-      state.formQuality = 'neutral';
-    } else {
-      state.feedback = 'Tracking active';
-      state.formQuality = 'neutral';
     }
     return state;
   }
 
-  if (state.phase === 'descending' || state.phase === 'at_bottom' || state.phase === 'ascending') {
-    if (isDeepEnough) {
-      state._reachedDepth = true;
-      state.phase = 'at_bottom';
-      state.feedback = 'Good! Come back up!';
-      state.formQuality = 'good';
-      return state;
-    }
-
-    if (state._reachedDepth && isRecovered && timeSinceRep >= REP_COOLDOWN_MS) {
+  if (state.phase === 'hk_knee_up') {
+    if (bothKneesDown && timeSinceRep >= REP_COOLDOWN_MS) {
       state.repCount += 1;
       state._lastRepTime = now;
-      state._reachedDepth = false;
-      state.phase = 'standing';
+      state.phase = 'hk_standing';
       state.feedback = `Rep ${state.repCount}!`;
       state.formQuality = 'good';
-      return state;
+    } else if (eitherKneeUp) {
+      state.feedback = 'Good! Bring it down!';
     }
-
-    state.phase = isStanding ? 'standing' : 'ascending';
-    state.feedback = 'Nice! Keep coming up!';
-    state.formQuality = 'good';
     return state;
   }
 
-  state.phase = 'standing';
+  state.phase = 'hk_standing';
   return state;
 }
 
