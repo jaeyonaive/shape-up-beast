@@ -1,11 +1,4 @@
-export type Exercise = 'squat' | 'lunge' | 'jumping_jack' | 'pushup';
-
-export interface Monster {
-  id: string;
-  name: string;
-  image: string;
-  exercise: Exercise;
-}
+import type { ExerciseType } from './exercise-detection';
 
 export interface GameState {
   totalCoins: number;
@@ -15,17 +8,16 @@ export interface GameState {
   totalCalories: number;
 }
 
-export const MONSTER: Monster = {
-  id: 'bunny',
-  name: 'Brawler Bunny',
-  image: 'monster-tutorial',
-  exercise: 'squat',
-};
+export const MONSTER_MAX_HP = 100;
 
-// ~0.32 calories per squat (average estimate)
+// Points & coins
+export const BASE_POINTS_PER_REP = 10;
+export const COINS_PER_REP = 5;
 export const CALORIES_PER_SQUAT = 0.32;
 
-// Combo thresholds for bonus multipliers
+// Combo system
+export const COMBO_TIMEOUT_MS = 4000;
+
 export function getComboMultiplier(streak: number): number {
   if (streak >= 20) return 5;
   if (streak >= 15) return 4;
@@ -43,21 +35,22 @@ export function getComboLabel(streak: number): string | null {
   return null;
 }
 
-// Points: base 10 per squat * combo multiplier
-export const BASE_POINTS_PER_SQUAT = 10;
-export const COINS_PER_SQUAT = 5;
+// Workout phases
+export interface WorkoutPhase {
+  exercise: ExerciseType;
+  duration: number; // seconds
+  label: string;
+  emoji: string;
+}
 
-// Combo resets after this many seconds without a squat
-export const COMBO_TIMEOUT_MS = 4000;
+export const WORKOUT_PHASES: WorkoutPhase[] = [
+  { exercise: 'squats', duration: 30, label: 'Squats', emoji: '🏋️' },
+  { exercise: 'jumping_jacks', duration: 30, label: 'Jumping Jacks', emoji: '⭐' },
+  { exercise: 'lunges', duration: 30, label: 'Lunges', emoji: '🦵' },
+];
 
 export function getDefaultGameState(): GameState {
-  return {
-    totalCoins: 0,
-    totalReps: 0,
-    highScore: 0,
-    bestStreak: 0,
-    totalCalories: 0,
-  };
+  return { totalCoins: 0, totalReps: 0, highScore: 0, bestStreak: 0, totalCalories: 0 };
 }
 
 export function loadGameState(): GameState {
