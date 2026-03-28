@@ -50,10 +50,10 @@ const BODY_DETECT_FRAMES = 3;
 const CALIBRATION_TIMEOUT_MS = 4000;
 const MIN_HIP_DROP = 0.02;
 const SMOOTHING_WINDOW = 3;
-const REP_COOLDOWN_MS = 800;
+const REP_COOLDOWN_MS = 700;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 130; // degrees — below this = squatting (stricter)
-const SQUAT_STANDING_ANGLE = 160;       // degrees — above this = standing
+const SQUAT_KNEE_ANGLE_THRESHOLD = 140; // degrees — below this = squatting
+const SQUAT_STANDING_ANGLE = 158;       // degrees — above this = standing
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -284,9 +284,8 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   const threshold = state._threshold;
   const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
 
-  // Require BOTH knee angle AND hip drop for squatting (strict, no false positives)
-  const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD && smoothedHipY > threshold;
-  // Standing = knee straight AND hips back up
+  // Require knee angle OR hip drop, but standing needs both signals
+  const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
   const isStanding = kneeAngle > SQUAT_STANDING_ANGLE && smoothedHipY <= standingZone;
 
   if (state.phase === 'standing') {
