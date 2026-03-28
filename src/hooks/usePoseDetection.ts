@@ -6,6 +6,7 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 export function usePoseDetection() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
@@ -50,6 +51,7 @@ export function usePoseDetection() {
       ]);
 
       streamRef.current = cameraStream;
+      setStream(cameraStream);
       const video = videoRef.current;
       video.srcObject = cameraStream; // FIX: was using stale `stream` state
       await video.play();
@@ -145,11 +147,12 @@ export function usePoseDetection() {
     }
     setCameraActive(false);
     setLandmarks(null);
+    setStream(null);
   }, []);
 
   useEffect(() => {
     return () => { stopCamera(); };
   }, [stopCamera]);
 
-  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera };
+  return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream };
 }

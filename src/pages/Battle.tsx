@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { CameraOverlay } from '@/components/game/CameraOverlay';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import { detectSquat, createInitialSquatState, type SquatState } from '@/lib/squat-detection';
@@ -21,7 +22,7 @@ export default function Battle() {
   const monsterIndex = parseInt(monsterId || '0', 10);
   const monster = MONSTERS[monsterIndex];
 
-  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera } = usePoseDetection();
+  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream } = usePoseDetection();
 
   const [hp, setHp] = useState(monster?.maxHp || 100);
   const [timeLeft, setTimeLeft] = useState(monster?.timeLimit || 60);
@@ -38,7 +39,6 @@ export default function Battle() {
   const [displayState, setDisplayState] = useState<SquatState>(squatStateRef.current);
   const prevRepRef = useRef(0);
 
-  // Timer
   useEffect(() => {
     if (!gameActive || gameOver || victory) return;
     if (timeLeft <= 0) { setGameOver(true); return; }
@@ -46,16 +46,12 @@ export default function Battle() {
     return () => clearInterval(interval);
   }, [gameActive, timeLeft, gameOver, victory]);
 
-  // Pose → squat detection
   useEffect(() => {
     if (!landmarks || !started || gameOver || victory) return;
-
     const newState = detectSquat(landmarks, squatStateRef.current);
     squatStateRef.current = newState;
     setDisplayState({ ...newState });
-
     if (newState.calibrated && !gameActive) setGameActive(true);
-
     if (newState.repCount > prevRepRef.current && gameActive) {
       prevRepRef.current = newState.repCount;
       const damagePerRep = Math.ceil(monster.maxHp / monster.repsToKill);
@@ -67,14 +63,11 @@ export default function Battle() {
           const state = loadGameState();
           state.totalCoins += monster.goldReward;
           state.totalReps += newState.repCount;
-          if (!state.completedMonsters.includes(monster.id)) {
-            state.completedMonsters.push(monster.id);
-          }
+          if (!state.completedMonsters.includes(monster.id)) state.completedMonsters.push(monster.id);
           saveGameState(state);
         }
         return newHp;
       });
-      // Damage feedback
       setIsHit(true);
       setDamageText(`-${damagePerRep}`);
       setStreak(s => s + 1);
@@ -96,7 +89,6 @@ export default function Battle() {
     );
   }
 
-  // Pre-start
   if (!started) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 gap-6">
@@ -109,15 +101,14 @@ export default function Battle() {
           <p className="font-body text-sm text-muted-foreground mb-6">
             {monster.repsToKill} reps to defeat • {monster.timeLimit}s time limit
           </p>
-          <Button onClick={handleStart} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
-            📷 Start Camera & Fight!
+          <Button onClick={handleStart} disabled={isLoading} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
+            {isLoading ? '⏳ Loading...' : '📷 Start Camera & Fight!'}
           </Button>
         </div>
       </div>
     );
   }
 
-  // Victory / Game Over
   if (victory || gameOver) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
@@ -130,16 +121,10 @@ export default function Battle() {
             {victory ? `You defeated ${monster.name}!` : `${monster.name} survived! Try again!`}
           </p>
           <div className="space-y-2 mb-6">
-            <p className="font-body text-sm text-foreground">
-              Reps: <span className="font-pixel text-primary">{displayState.repCount}</span>
-            </p>
-            <p className="font-body text-sm text-foreground">
-              Form: <span className="font-pixel" style={{
-                color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' :
-                       displayState.formScore >= 50 ? 'hsl(var(--game-gold))' :
-                       'hsl(var(--game-warning))'
-              }}>{displayState.formScore}%</span>
-            </p>
+            <p className="font-body text-sm text-foreground">Reps: <span className="font-pixel text-primary">{displayState.repCount}</span></p>
+            <p className="font-body text-sm text-foreground">Form: <span className="font-pixel" style={{
+              color: displayState.formScore >= 80 ? 'hsl(var(--game-success))' : displayState.formScore >= 50 ? 'hsl(var(--game-gold))' : 'hsl(var(--game-warning))'
+            }}>{displayState.formScore}%</span></p>
             {victory && <p className="font-body text-sm text-game-gold">+{monster.goldReward}G earned!</p>}
           </div>
           <div className="flex flex-col gap-3">
@@ -154,88 +139,65 @@ export default function Battle() {
     );
   }
 
-  // ─── Main Battle Screen (no camera view) ───
   return (
-    <div className="h-screen w-screen relative overflow-hidden flex flex-col" style={{ backgroundImage: `url(${battleBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-      {/* Close button */}
-      <button
-        onClick={() => { stopCamera(); navigate('/'); }}
-        className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
-      >
-        <span className="text-foreground text-lg">✕</span>
-      </button>
-
-      {/* HP Bar */}
-      <div className="pt-4 px-3 pr-14 z-20">
-        <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+    <div className="h-screen w-screen relative overflow-hidden flex flex-col">
+      {/* Top 60%: Monster + battle scene */}
+      <div className="relative" style={{ flex: '0 0 60%' }}>
+        <img src={battleBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        <button onClick={() => { stopCamera(); navigate('/'); }} className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
+          <span className="text-foreground text-lg">✕</span>
+        </button>
+        <div className="absolute top-4 left-3 right-14 z-20">
+          <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+          <div className="relative">
+            <img
+              src={monsterImages[monster.image]}
+              alt="Monster"
+              className={`w-56 h-56 object-contain drop-shadow-2xl ${isHit ? '' : 'monster-float'}`}
+              style={isHit ? { filter: 'brightness(2) hue-rotate(30deg)', transform: 'scale(1.1)' } : {}}
+            />
+            {damageText && (
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 animate-bounce">
+                <span className="font-pixel text-2xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
+          <div className="flex items-center gap-2"><span className="text-xl">💪</span><span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">⏱</span><span className="font-pixel text-sm text-foreground game-text-shadow">{timeLeft}s</span></div>
+          <div className="flex items-center gap-2"><span className="text-xl">🔥</span><span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span></div>
+          <div className="flex items-center gap-1.5"><img src={coinImg} alt="coins" className="w-6 h-6" /><span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span></div>
+        </div>
       </div>
 
-      {/* Monster area — centered */}
-      <div className="flex-1 flex items-center justify-center relative">
-        <div className="relative">
-          <img
-            src={monsterImages[monster.image]}
-            alt="Monster"
-            className={`w-56 h-56 object-contain drop-shadow-2xl transition-transform ${isHit ? 'scale-110 brightness-150' : 'monster-float'}`}
-            style={isHit ? { filter: 'brightness(2) hue-rotate(30deg)' } : {}}
-          />
-          {/* Damage text */}
-          {damageText && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 animate-bounce">
-              <span className="font-pixel text-2xl text-destructive game-text-shadow drop-shadow-lg">
-                {damageText}
-              </span>
+      {/* Bottom 40%: Camera with AR overlay */}
+      <div className="relative flex-1 bg-black">
+        <CameraOverlay stream={stream} landmarks={landmarks} />
+        <div className="absolute bottom-3 left-3 right-3 z-20">
+          {!gameActive && (
+            <div className="p-3 rounded-xl bg-background/80 backdrop-blur-sm border border-border text-center">
+              <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
+              <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
+              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${displayState.calibrationProgress ?? 0}%` }} />
+              </div>
+            </div>
+          )}
+          {gameActive && (
+            <div className={`p-2 rounded-xl text-center backdrop-blur-sm ${
+              displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
+              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
+              'bg-background/60 border border-border'
+            }`}>
+              <p className="font-body text-xs font-semibold text-foreground game-text-shadow">{displayState.feedback}</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Bottom stats & feedback */}
-      <div className="px-3 pb-4 z-20 space-y-3">
-        {/* Stats row */}
-        <div className="flex items-center justify-between game-panel px-4 py-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xl">💪</span>
-            <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">⏱</span>
-            <span className="font-pixel text-sm text-foreground game-text-shadow">{timeLeft}s</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">🔥</span>
-            <span className="font-pixel text-sm text-foreground game-text-shadow">{streak}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <img src={coinImg} alt="coins" className="w-6 h-6" />
-            <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
-          </div>
-        </div>
-
-        {/* Feedback */}
-        {!gameActive && (
-          <div className="p-3 rounded-xl bg-background/80 backdrop-blur-sm border border-border text-center">
-            <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
-            <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
-            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${displayState.calibrationProgress ?? 0}%` }} />
-            </div>
-          </div>
-        )}
-        {gameActive && (
-          <div className={`p-2 rounded-xl text-center backdrop-blur-sm ${
-            displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
-            displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
-            'bg-background/60 border border-border'
-          }`}>
-            <p className="font-body text-xs font-semibold text-foreground game-text-shadow">
-              {displayState.feedback}
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Loading overlay */}
       {isLoading && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80">
           <div className="text-center">
@@ -244,8 +206,6 @@ export default function Battle() {
           </div>
         </div>
       )}
-
-      {/* Error overlay */}
       {error && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/90">
           <div className="text-center px-4">
