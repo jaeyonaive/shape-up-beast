@@ -115,7 +115,7 @@ function getMidHipY(landmarks: Landmark[]): number {
 
 function hasFullBody(landmarks: Landmark[]): boolean {
   const required = [POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER, POSE.LEFT_HIP, POSE.RIGHT_HIP, POSE.LEFT_KNEE, POSE.RIGHT_KNEE];
-  return required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.2);
+  return required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.1);
 }
 
 function smoothY(history: number[], newVal: number): { smoothed: number; history: number[] } {
