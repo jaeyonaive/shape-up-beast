@@ -27,9 +27,9 @@ export function getComboMultiplier(streak: number): number {
 }
 
 export function getComboLabel(streak: number): string | null {
-  if (streak >= 20) return `x${streak} 🔥🔥🔥 UNSTOPPABLE!`;
-  if (streak >= 15) return `x${streak} 🔥🔥 ON FIRE!`;
-  if (streak >= 10) return `x${streak} 🔥 COMBO!`;
+  if (streak >= 20) return `x${streak} UNSTOPPABLE!`;
+  if (streak >= 15) return `x${streak} ON FIRE!`;
+  if (streak >= 10) return `x${streak} COMBO!`;
   if (streak >= 5) return `x${streak} combo`;
   if (streak >= 3) return `x${streak}`;
   return null;

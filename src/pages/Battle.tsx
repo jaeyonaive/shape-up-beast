@@ -217,7 +217,7 @@ export default function Battle() {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
         <div className="game-panel p-8 max-w-sm w-full text-center slide-up">
-          <div className="text-6xl mb-4">🏆</div>
+          <div className="text-6xl mb-4">VICTORY</div>
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">Workout Complete!</h2>
           <div className="space-y-2 mb-6">
             <p className="font-body text-sm text-foreground">Score: <span className="font-pixel text-primary">{score}</span></p>
