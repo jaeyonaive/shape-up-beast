@@ -28,7 +28,7 @@ export function MonsterDisplay({ imageKey, isHit }: MonsterDisplayProps) {
       <img
         src={monsterImages[imageKey]}
         alt="Monster"
-        className={`w-56 h-56 object-contain drop-shadow-2xl ${
+        className={`w-80 h-80 object-contain drop-shadow-2xl ${
           hitAnim ? 'monster-hit' : 'monster-float'
         }`}
       />
