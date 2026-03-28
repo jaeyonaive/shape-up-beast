@@ -44,8 +44,8 @@ export interface WorkoutPhase {
 }
 
 export const WORKOUT_PHASES: WorkoutPhase[] = [
-  { exercise: 'squats', duration: 45, label: 'Squats', emoji: '🏋️' },
-  { exercise: 'jumping_jacks', duration: 45, label: 'Jumping Jacks', emoji: '⭐' },
+  { exercise: 'squats', duration: 30, label: 'Squats', emoji: '🏋️' },
+  { exercise: 'jumping_jacks', duration: 30, label: 'Jumping Jacks', emoji: '⭐' },
 ];
 
 export function getDefaultGameState(): GameState {
