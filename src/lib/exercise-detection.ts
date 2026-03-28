@@ -286,7 +286,8 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   // Use EITHER knee angle OR hip position (more forgiving)
   const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
-  const isStanding = (kneeAngle > SQUAT_STANDING_ANGLE || smoothedHipY <= standingZone) && smoothedHipY <= standingZone;
+  // Standing = knee angle straight OR hips back up (either signal is enough)
+  const isStanding = kneeAngle > SQUAT_STANDING_ANGLE || smoothedHipY <= standingZone;
 
   if (state.phase === 'standing') {
     if (isSquatting) {
