@@ -193,19 +193,19 @@ export default function Battle() {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 gap-6">
         <img src={monsterTutorial} alt="Monster" className="w-48 h-48 object-contain drop-shadow-2xl monster-float" />
         <div className="text-center">
-          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">3-Phase Workout</h2>
+          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">2-Phase Workout</h2>
           <div className="space-y-1 mb-4">
             {WORKOUT_PHASES.map((p, i) => (
               <p key={i} className="font-body text-sm text-muted-foreground">
-                {p.emoji} {p.label} — {p.duration}s
+                {p.label} — {p.duration}s
               </p>
             ))}
           </div>
           <p className="font-body text-xs text-muted-foreground mb-6">
-            Defeat the monster • Earn coins • Burn calories
+            Defeat the monster · Earn coins · Burn calories
           </p>
           <Button onClick={handleStart} disabled={isLoading} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
-            {isLoading ? '⏳ Loading...' : '📷 Start Workout!'}
+            {isLoading ? 'Loading...' : 'Start Workout!'}
           </Button>
         </div>
       </div>
