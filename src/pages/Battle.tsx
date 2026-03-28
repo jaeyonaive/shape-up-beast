@@ -197,7 +197,7 @@ export default function Battle() {
           <div className="space-y-1 mb-4">
             {WORKOUT_PHASES.map((p, i) => (
               <p key={i} className="font-body text-sm text-muted-foreground">
-                {p.label} — {p.duration}s
+                {p.emoji} {p.label} — {p.duration}s
               </p>
             ))}
           </div>
