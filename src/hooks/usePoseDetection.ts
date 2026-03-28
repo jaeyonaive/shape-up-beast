@@ -57,20 +57,31 @@ export function usePoseDetection() {
       await video.play();
       console.log('[FitMon] Camera started:', video.videoWidth, 'x', video.videoHeight);
 
-      // Use LITE model for much faster loading
-      const poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+      // Use LITE model — try GPU first, fall back to CPU
+      let poseLandmarker: PoseLandmarker;
+      const modelOptions = {
         baseOptions: {
           modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
-          delegate: 'GPU',
+          delegate: 'GPU' as const,
         },
-        runningMode: 'VIDEO',
+        runningMode: 'VIDEO' as const,
         numPoses: 1,
         minPoseDetectionConfidence: 0.5,
         minPosePresenceConfidence: 0.5,
         minTrackingConfidence: 0.5,
-      });
+      };
 
-      console.log('[FitMon] PoseLandmarker (lite) initialized');
+      try {
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, modelOptions);
+        console.log('[Fitnasia] PoseLandmarker initialized (GPU)');
+      } catch (gpuErr) {
+        console.warn('[Fitnasia] GPU delegate failed, falling back to CPU:', gpuErr);
+        poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+          ...modelOptions,
+          baseOptions: { ...modelOptions.baseOptions, delegate: 'CPU' as const },
+        });
+        console.log('[Fitnasia] PoseLandmarker initialized (CPU fallback)');
+      }
       landmarkerRef.current = poseLandmarker;
       activeRef.current = true;
       setCameraActive(true);
