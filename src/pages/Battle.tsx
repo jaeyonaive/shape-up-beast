@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CameraOverlay } from '@/components/game/CameraOverlay';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import { detectSquat, createInitialSquatState, type SquatState } from '@/lib/squat-detection';
@@ -22,34 +21,32 @@ export default function Battle() {
   const monsterIndex = parseInt(monsterId || '0', 10);
   const monster = MONSTERS[monsterIndex];
 
-  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream } = usePoseDetection();
+  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera } = usePoseDetection();
 
   const [hp, setHp] = useState(monster?.maxHp || 100);
   const [timeLeft, setTimeLeft] = useState(monster?.timeLimit || 60);
   const [coins, setCoins] = useState(0);
   const [streak, setStreak] = useState(0);
   const [isHit, setIsHit] = useState(false);
+  const [damageText, setDamageText] = useState<string | null>(null);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
   const [started, setStarted] = useState(false);
-  const [gameActive, setGameActive] = useState(false); // true after calibration
+  const [gameActive, setGameActive] = useState(false);
 
   const squatStateRef = useRef<SquatState>(createInitialSquatState());
   const [displayState, setDisplayState] = useState<SquatState>(squatStateRef.current);
   const prevRepRef = useRef(0);
 
-  // Timer — only runs after calibration
+  // Timer
   useEffect(() => {
     if (!gameActive || gameOver || victory) return;
-    if (timeLeft <= 0) {
-      setGameOver(true);
-      return;
-    }
+    if (timeLeft <= 0) { setGameOver(true); return; }
     const interval = setInterval(() => setTimeLeft(t => t - 1), 1000);
     return () => clearInterval(interval);
   }, [gameActive, timeLeft, gameOver, victory]);
 
-  // Pose detection -> squat detection
+  // Pose → squat detection
   useEffect(() => {
     if (!landmarks || !started || gameOver || victory) return;
 
@@ -57,15 +54,11 @@ export default function Battle() {
     squatStateRef.current = newState;
     setDisplayState({ ...newState });
 
-    // Start game timer once calibrated
-    if (newState.calibrated && !gameActive) {
-      setGameActive(true);
-    }
+    if (newState.calibrated && !gameActive) setGameActive(true);
 
-    // Check for new rep
     if (newState.repCount > prevRepRef.current && gameActive) {
       prevRepRef.current = newState.repCount;
-      const damagePerRep = monster.maxHp / monster.repsToKill;
+      const damagePerRep = Math.ceil(monster.maxHp / monster.repsToKill);
       setHp(prev => {
         const newHp = Math.max(0, prev - damagePerRep);
         if (newHp <= 0) {
@@ -81,15 +74,18 @@ export default function Battle() {
         }
         return newHp;
       });
+      // Damage feedback
       setIsHit(true);
+      setDamageText(`-${damagePerRep}`);
       setStreak(s => s + 1);
-      setTimeout(() => setIsHit(false), 300);
+      setTimeout(() => setIsHit(false), 400);
+      setTimeout(() => setDamageText(null), 800);
     }
   }, [landmarks, started, gameOver, victory, monster, gameActive]);
 
   const handleStart = useCallback(async () => {
-    await startCamera();
     setStarted(true);
+    await startCamera();
   }, [startCamera]);
 
   if (!monster) {
@@ -100,7 +96,7 @@ export default function Battle() {
     );
   }
 
-  // Pre-start screen
+  // Pre-start
   if (!started) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 gap-6">
@@ -113,12 +109,8 @@ export default function Battle() {
           <p className="font-body text-sm text-muted-foreground mb-6">
             {monster.repsToKill} reps to defeat • {monster.timeLimit}s time limit
           </p>
-          <Button
-            onClick={handleStart}
-            disabled={isLoading}
-            className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow"
-          >
-            {isLoading ? '⏳ Loading...' : '📷 Start Camera & Fight!'}
+          <Button onClick={handleStart} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
+            📷 Start Camera & Fight!
           </Button>
         </div>
       </div>
@@ -132,7 +124,7 @@ export default function Battle() {
         <div className="game-panel p-8 max-w-sm w-full text-center slide-up">
           <div className="text-6xl mb-4">{victory ? '🎉' : '💀'}</div>
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">
-            {victory ? 'Victory!' : 'Time\'s Up!'}
+            {victory ? 'Victory!' : "Time's Up!"}
           </h2>
           <p className="font-body text-sm text-muted-foreground mb-4">
             {victory ? `You defeated ${monster.name}!` : `${monster.name} survived! Try again!`}
@@ -148,9 +140,7 @@ export default function Battle() {
                        'hsl(var(--game-warning))'
               }}>{displayState.formScore}%</span>
             </p>
-            {victory && (
-              <p className="font-body text-sm text-game-gold">+{monster.goldReward}G earned!</p>
-            )}
+            {victory && <p className="font-body text-sm text-game-gold">+{monster.goldReward}G earned!</p>}
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">🏠 Home</Button>
@@ -164,41 +154,46 @@ export default function Battle() {
     );
   }
 
+  // ─── Main Battle Screen (no camera view) ───
   return (
-    <div className="h-screen w-screen relative overflow-hidden flex flex-col">
-      {/* Top 60%: Monster + battle scene */}
-      <div className="relative" style={{ flex: '0 0 60%' }}>
-        {/* Battle background */}
-        <img
-          src={battleBg}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+    <div className="h-screen w-screen relative overflow-hidden flex flex-col" style={{ backgroundImage: `url(${battleBg})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+      {/* Close button */}
+      <button
+        onClick={() => { stopCamera(); navigate('/'); }}
+        className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
+      >
+        <span className="text-foreground text-lg">✕</span>
+      </button>
 
-        {/* Back button */}
-        <button
-          onClick={() => { stopCamera(); navigate('/'); }}
-          className="absolute top-5 right-3 z-30 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center"
-        >
-          <span className="text-foreground text-lg">✕</span>
-        </button>
+      {/* HP Bar */}
+      <div className="pt-4 px-3 pr-14 z-20">
+        <HPBar current={hp} max={monster.maxHp} name={monster.name} />
+      </div>
 
-        {/* HP Bar */}
-        <div className="absolute top-4 left-3 right-14 z-20">
-          <HPBar current={hp} max={monster.maxHp} name={monster.name} />
-        </div>
-
-        {/* Monster - centered */}
-        <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+      {/* Monster area — centered */}
+      <div className="flex-1 flex items-center justify-center relative">
+        <div className="relative">
           <img
             src={monsterImages[monster.image]}
             alt="Monster"
-            className={`w-56 h-56 object-contain drop-shadow-2xl ${isHit ? 'monster-hit' : 'monster-float'}`}
+            className={`w-56 h-56 object-contain drop-shadow-2xl transition-transform ${isHit ? 'scale-110 brightness-150' : 'monster-float'}`}
+            style={isHit ? { filter: 'brightness(2) hue-rotate(30deg)' } : {}}
           />
+          {/* Damage text */}
+          {damageText && (
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 animate-bounce">
+              <span className="font-pixel text-2xl text-destructive game-text-shadow drop-shadow-lg">
+                {damageText}
+              </span>
+            </div>
+          )}
         </div>
+      </div>
 
-        {/* Stats overlay on monster area */}
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
+      {/* Bottom stats & feedback */}
+      <div className="px-3 pb-4 z-20 space-y-3">
+        {/* Stats row */}
+        <div className="flex items-center justify-between game-panel px-4 py-2">
           <div className="flex items-center gap-2">
             <span className="text-xl">💪</span>
             <span className="font-pixel text-sm text-foreground game-text-shadow">{displayState.repCount}</span>
@@ -216,38 +211,28 @@ export default function Battle() {
             <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
           </div>
         </div>
-      </div>
 
-      {/* Bottom 40%: Camera with AR overlay */}
-      <div className="relative flex-1 bg-black">
-        <CameraOverlay stream={stream} landmarks={landmarks} />
-
-        {/* Feedback overlay on camera */}
-        <div className="absolute bottom-3 left-3 right-3 z-20">
-          {/* Calibration overlay */}
-          {!gameActive && (
-            <div className="p-3 rounded-xl bg-background/80 backdrop-blur-sm border border-border text-center">
-              <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
-              <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
-              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${displayState.calibrationProgress ?? 0}%` }} />
-              </div>
+        {/* Feedback */}
+        {!gameActive && (
+          <div className="p-3 rounded-xl bg-background/80 backdrop-blur-sm border border-border text-center">
+            <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
+            <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${displayState.calibrationProgress ?? 0}%` }} />
             </div>
-          )}
-
-          {/* Game feedback */}
-          {gameActive && (
-            <div className={`p-2 rounded-xl text-center backdrop-blur-sm ${
-              displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
-              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
-              'bg-background/60 border border-border'
-            }`}>
-              <p className="font-body text-xs font-semibold text-foreground game-text-shadow">
-                {displayState.feedback}
-              </p>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+        {gameActive && (
+          <div className={`p-2 rounded-xl text-center backdrop-blur-sm ${
+            displayState.formQuality === 'good' ? 'bg-green-500/20 border border-green-500/40' :
+            displayState.formQuality === 'needs_work' ? 'bg-yellow-500/20 border border-yellow-500/40' :
+            'bg-background/60 border border-border'
+          }`}>
+            <p className="font-body text-xs font-semibold text-foreground game-text-shadow">
+              {displayState.feedback}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Loading overlay */}
@@ -255,7 +240,7 @@ export default function Battle() {
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80">
           <div className="text-center">
             <div className="text-4xl mb-4 animate-spin">⏳</div>
-            <p className="font-pixel text-xs text-foreground">Loading pose detection...</p>
+            <p className="font-pixel text-xs text-foreground">Starting camera…</p>
           </div>
         </div>
       )}
