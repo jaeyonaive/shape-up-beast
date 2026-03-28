@@ -49,8 +49,8 @@ export interface ExerciseState {
 const BODY_DETECT_FRAMES = 3;
 const CALIBRATION_TIMEOUT_MS = 4000;
 const MIN_HIP_DROP = 0.02;
-const SMOOTHING_WINDOW = 3;
-const REP_COOLDOWN_MS = 700;
+const SMOOTHING_WINDOW = 2;
+const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
 const SQUAT_KNEE_ANGLE_THRESHOLD = 140; // degrees — below this = squatting
 const SQUAT_STANDING_ANGLE = 155;       // degrees — above this = standing
