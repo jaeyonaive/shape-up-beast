@@ -6,8 +6,8 @@ import { BodySilhouette } from '@/components/game/BodySilhouette';
 import { useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import {
-  createExerciseState, detectExercise, DAMAGE_MAP, CALORIES_PER_REP,
-  type ExerciseState,
+  createExerciseState, detectExercise, DAMAGE_MAP, EXERCISE_LABELS, CALORIES_PER_REP,
+  type ExerciseState, type ExerciseType,
 } from '@/lib/exercise-detection';
 import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
@@ -20,36 +20,16 @@ import battleBgForest from '@/assets/battle-bg-forest.jpg';
 import coinImg from '@/assets/coin.png';
 import monsterTutorial from '@/assets/monster-tutorial.png';
 
-function getProximityHint(landmarks: any[] | null): string | null {
-  if (!landmarks) return 'Step into frame so your full body is visible';
-  const lShoulder = landmarks[11];
-  const rShoulder = landmarks[12];
-  const lAnkle = landmarks[27];
-  const rAnkle = landmarks[28];
-  if (!lShoulder || !rShoulder) return 'Move so your shoulders are visible';
-
-  // Check if too close (body fills >85% of frame height)
-  const topY = Math.min(lShoulder.y, rShoulder.y);
-  const bottomY = lAnkle && rAnkle ? Math.max(lAnkle.y, rAnkle.y) : 1;
-  const bodyHeight = bottomY - topY;
-
-  if (bodyHeight > 0.85) return '📏 Step back — you\'re too close';
-  if (bodyHeight < 0.3 && lAnkle && rAnkle) return '📏 Step closer to the camera';
-  if (!lAnkle || !rAnkle || (lAnkle.visibility ?? 0) < 0.3 || (rAnkle.visibility ?? 0) < 0.3) {
-    return '👟 Step back until your full body, including feet, is visible';
-  }
-  if (topY < 0.02) return '⬇️ Move down slightly — head is cut off';
-  return null;
-}
-
 export default function Battle() {
   const navigate = useNavigate();
   const { landmarks, isLoading, error, startCamera, stopCamera, stream } = usePoseDetection();
 
+  // Workout phase management
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [phaseTimeLeft, setPhaseTimeLeft] = useState(WORKOUT_PHASES[0].duration);
   const [workoutComplete, setWorkoutComplete] = useState(false);
 
+  // Game state
   const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -65,6 +45,7 @@ export default function Battle() {
   const [monsterDefeated, setMonsterDefeated] = useState(false);
   const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
 
+  // Exercise detection state
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
   const [displayState, setDisplayState] = useState<ExerciseState>(exerciseStateRef.current);
   const prevRepRef = useRef(0);
@@ -72,7 +53,6 @@ export default function Battle() {
   const streakRef = useRef(0);
 
   const currentPhase = WORKOUT_PHASES[phaseIndex];
-  const proximityHint = getProximityHint(landmarks);
 
   // Phase countdown timer
   useEffect(() => {
@@ -80,13 +60,18 @@ export default function Battle() {
     const interval = setInterval(() => {
       setPhaseTimeLeft(t => {
         if (t <= 1) {
+          // Phase ended, move to next
           const nextIdx = phaseIndex + 1;
           if (nextIdx >= WORKOUT_PHASES.length) {
             setWorkoutComplete(true);
             return 0;
           }
+          
+          // Show transition overlay
           const nextPhase = WORKOUT_PHASES[nextIdx];
           setPhaseTransition({ label: nextPhase.label, emoji: nextPhase.emoji });
+          
+          // After 3s countdown, start new phase
           setTimeout(() => {
             setPhaseIndex(nextIdx);
             const newExState = createExerciseState(nextPhase.exercise);
@@ -106,6 +91,7 @@ export default function Battle() {
             setDisplayState({ ...newExState });
             setPhaseTransition(null);
           }, 3000);
+          
           return nextPhase.duration;
         }
         return t - 1;
@@ -114,8 +100,11 @@ export default function Battle() {
     return () => clearInterval(interval);
   }, [gameActive, sessionOver, workoutComplete, phaseIndex]);
 
+  // End session when workout complete
   useEffect(() => {
-    if (workoutComplete && !sessionOver) handleEndSession();
+    if (workoutComplete && !sessionOver) {
+      handleEndSession();
+    }
   }, [workoutComplete]);
 
   // Combo timeout
@@ -141,6 +130,7 @@ export default function Battle() {
     if (newState.calibrated && !gameActive) setGameActive(true);
 
     const isActive = gameActive || newState.calibrated;
+    
     if (newState.repCount > prevRepRef.current && isActive) {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
@@ -149,6 +139,7 @@ export default function Battle() {
       const damage = DAMAGE_MAP[exType];
       const calPerRep = CALORIES_PER_REP[exType];
 
+      // Streak
       const newStreak = streakRef.current + 1;
       streakRef.current = newStreak;
       setStreak(newStreak);
@@ -162,21 +153,25 @@ export default function Battle() {
       setCalories(cal => +(cal + calPerRep).toFixed(1));
       setTotalReps(r => r + 1);
 
+      // Monster damage
       setMonsterHP(hp => {
         const newHP = Math.max(0, hp - damage);
         if (newHP <= 0) setMonsterDefeated(true);
         return newHP;
       });
 
+      // Combo label
       const label = getComboLabel(newStreak);
       if (label) setComboText(label);
 
+      // Hit effects
       setIsHit(true);
       setDamageText(`-${damage}`);
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
     }
   }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
 
+  // Respawn monster when defeated
   useEffect(() => {
     if (monsterDefeated) {
       setTimeout(() => {
@@ -217,9 +212,6 @@ export default function Battle() {
               </p>
             ))}
           </div>
-          <p className="font-body text-xs text-muted-foreground mb-2">
-            📱 Hold your phone in <strong>landscape mode</strong> for best results
-          </p>
           <p className="font-body text-xs text-muted-foreground mb-6">
             Defeat the monster · Earn coins · Burn calories
           </p>
@@ -254,22 +246,91 @@ export default function Battle() {
     );
   }
 
-  // ─── Main gameplay: landscape layout (70% camera left, 30% UI right) ───
   return (
-    <div className="h-screen w-screen relative overflow-hidden flex flex-row">
-      {/* LEFT: Camera area — 70% width */}
-      <div className="relative h-full bg-black" style={{ flex: '0 0 50%' }}>
-        <CameraOverlay stream={stream} landmarks={landmarks} />
+    <div className="h-screen w-screen relative overflow-hidden flex flex-col">
+      {/* Top 60%: Monster + battle scene */}
+      <div className="relative" style={{ flex: '0 0 60%' }}>
+        <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
 
-        {/* Body silhouette guide during calibration */}
+        {/* Close button */}
+        <button onClick={handleEndSession} className="absolute top-3 right-3 z-40 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
+          <span className="text-foreground text-lg">✕</span>
+        </button>
+
+        {/* HP Bar - top, full width */}
+        <div className="absolute top-3 left-3 right-14 z-30">
+          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
+        </div>
+
+        {/* Timer - right side */}
+        <div className="absolute top-16 right-3 z-30">
+          <div className="game-panel px-3 py-2 text-center">
+            <span className="font-pixel text-[10px] text-muted-foreground block">TIME</span>
+            <span className="font-pixel text-lg text-foreground game-text-shadow">{phaseTimeLeft}s</span>
+          </div>
+        </div>
+
+        {/* Rep counter - right side, below timer */}
+        <div className="absolute top-[7.5rem] right-3 z-30">
+          <div className="game-panel px-3 py-2 text-center">
+            <span className="font-pixel text-[10px] text-muted-foreground block">REPS</span>
+            <span className="font-pixel text-lg text-primary game-text-shadow">{displayState.repCount}</span>
+          </div>
+        </div>
+
+        {/* Monster - centered in battle area */}
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+          <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
+        </div>
+
+        {/* Damage text */}
+        {damageText && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-20 animate-bounce">
+            <span className="font-pixel text-2xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
+          </div>
+        )}
+
+        {/* Combo text */}
+        {comboText && (
+          <div className="absolute top-36 left-1/2 -translate-x-1/2 z-20 animate-bounce">
+            <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
+          </div>
+        )}
+
+        {/* Monster defeated overlay */}
+        {monsterDefeated && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40">
+            <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
+          </div>
+        )}
+
+        {/* Bottom stats bar */}
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
+          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
+            <span className="text-lg">🔥</span>
+            <span className="font-pixel text-xs text-foreground game-text-shadow">{streak}</span>
+          </div>
+          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
+            <span className="font-pixel text-[10px] text-muted-foreground">{calories} kcal</span>
+          </div>
+          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
+            <img src={coinImg} alt="coins" className="w-5 h-5" />
+            <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom 40%: Camera with AR overlay */}
+      <div className="relative flex-1 bg-black">
+        <CameraOverlay stream={stream} landmarks={landmarks} />
+        
+        {/* Body silhouette guide - shown during calibration */}
         <BodySilhouette
           visible={!gameActive && started}
           bodyDetected={displayState.bodyDetected}
           kneesVisible={displayState.kneesVisible}
-          proximityHint={proximityHint}
         />
-
-        {/* Feedback overlay at bottom of camera */}
+        {/* Feedback overlay - always on top of camera area */}
         <div className="absolute bottom-3 left-3 right-3 z-30">
           {!gameActive && (
             <div className="p-3 rounded-xl bg-background/90 backdrop-blur-sm border border-border text-center shadow-lg">
@@ -291,85 +352,12 @@ export default function Battle() {
           )}
         </div>
 
-        {/* Damage text over camera */}
-        {damageText && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 animate-bounce">
-            <span className="font-pixel text-3xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
-          </div>
-        )}
-
-        {/* Combo text */}
-        {comboText && (
-          <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20 animate-bounce">
-            <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
-          </div>
-        )}
-
         {/* No camera fallback */}
         {!stream && !isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <p className="font-body text-sm text-muted-foreground">Waiting for camera...</p>
           </div>
         )}
-      </div>
-
-      {/* RIGHT: UI panel — 30% width */}
-      <div className="relative h-full flex flex-col" style={{ flex: '0 0 50%' }}>
-        {/* Battle background */}
-        <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-background/40" />
-
-        {/* Close button */}
-        <button onClick={handleEndSession} className="absolute top-2 right-2 z-40 w-8 h-8 rounded-full bg-muted/80 flex items-center justify-center">
-          <span className="text-foreground text-sm">✕</span>
-        </button>
-
-        {/* UI content stacked vertically */}
-        <div className="relative z-10 flex flex-col h-full p-2 gap-2">
-          {/* HP Bar - top */}
-          <div className="pr-8">
-            <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
-          </div>
-
-          {/* Timer + Reps row */}
-          <div className="flex gap-2">
-            <div className="game-panel px-2 py-1.5 text-center flex-1">
-              <span className="font-pixel text-[8px] text-muted-foreground block">TIME</span>
-              <span className="font-pixel text-sm text-foreground game-text-shadow">{phaseTimeLeft}s</span>
-            </div>
-            <div className="game-panel px-2 py-1.5 text-center flex-1">
-              <span className="font-pixel text-[8px] text-muted-foreground block">REPS</span>
-              <span className="font-pixel text-sm text-primary game-text-shadow">{displayState.repCount}</span>
-            </div>
-          </div>
-
-          {/* Monster - centered */}
-          <div className="flex-1 flex items-center justify-center relative">
-            <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
-
-            {/* Monster defeated overlay */}
-            {monsterDefeated && (
-              <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40 rounded-xl">
-                <span className="font-pixel text-xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom stats */}
-          <div className="flex items-center justify-between gap-1">
-            <div className="game-panel px-2 py-1 flex items-center gap-1">
-              <span className="text-sm">🔥</span>
-              <span className="font-pixel text-[10px] text-foreground game-text-shadow">{streak}</span>
-            </div>
-            <div className="game-panel px-2 py-1">
-              <span className="font-pixel text-[8px] text-muted-foreground">{calories} kcal</span>
-            </div>
-            <div className="game-panel px-2 py-1 flex items-center gap-1">
-              <img src={coinImg} alt="coins" className="w-4 h-4" />
-              <span className="font-pixel text-[10px] text-game-gold game-text-shadow">{coins}G</span>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Phase transition overlay */}
