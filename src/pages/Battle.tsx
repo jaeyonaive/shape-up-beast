@@ -119,7 +119,8 @@ export default function Battle() {
 
     if (newState.calibrated && !gameActive) setGameActive(true);
 
-    if (newState.repCount > prevRepRef.current && gameActive) {
+    const isActive = gameActive || newState.calibrated;
+    if (newState.repCount > prevRepRef.current && isActive) {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
 
