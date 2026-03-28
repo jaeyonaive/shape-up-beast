@@ -258,7 +258,7 @@ export default function Battle() {
   return (
     <div className="h-screen w-screen relative overflow-hidden flex flex-row">
       {/* LEFT: Camera area — 70% width */}
-      <div className="relative h-full bg-black" style={{ flex: '0 0 70%' }}>
+      <div className="relative h-full bg-black" style={{ flex: '0 0 50%' }}>
         <CameraOverlay stream={stream} landmarks={landmarks} />
 
         {/* Body silhouette guide during calibration */}
@@ -314,7 +314,7 @@ export default function Battle() {
       </div>
 
       {/* RIGHT: UI panel — 30% width */}
-      <div className="relative h-full flex flex-col" style={{ flex: '0 0 30%' }}>
+      <div className="relative h-full flex flex-col" style={{ flex: '0 0 50%' }}>
         {/* Battle background */}
         <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-background/40" />
