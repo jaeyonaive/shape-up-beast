@@ -49,11 +49,11 @@ export interface ExerciseState {
 const BODY_DETECT_FRAMES = 3;
 const CALIBRATION_TIMEOUT_MS = 4000;
 const MIN_HIP_DROP = 0.02;
-const SMOOTHING_WINDOW = 3;
-const REP_COOLDOWN_MS = 700;
+const SMOOTHING_WINDOW = 2;
+const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 140; // degrees — below this = squatting
-const SQUAT_STANDING_ANGLE = 155;       // degrees — above this = standing
+const SQUAT_KNEE_ANGLE_THRESHOLD = 145; // degrees — below this = squatting
+const SQUAT_STANDING_ANGLE = 158;       // degrees — above this = standing
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -115,7 +115,7 @@ function getMidHipY(landmarks: Landmark[]): number {
 
 function hasFullBody(landmarks: Landmark[]): boolean {
   const required = [POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER, POSE.LEFT_HIP, POSE.RIGHT_HIP, POSE.LEFT_KNEE, POSE.RIGHT_KNEE];
-  return required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.2);
+  return required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.1);
 }
 
 function smoothY(history: number[], newVal: number): { smoothed: number; history: number[] } {
@@ -286,7 +286,8 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   // Use EITHER knee angle OR hip position (more forgiving)
   const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
-  const isStanding = (kneeAngle > SQUAT_STANDING_ANGLE || smoothedHipY <= standingZone) && smoothedHipY <= standingZone;
+  // Standing = knee angle straight OR hips back up (either signal is enough)
+  const isStanding = kneeAngle > SQUAT_STANDING_ANGLE || smoothedHipY <= standingZone;
 
   if (state.phase === 'standing') {
     if (isSquatting) {

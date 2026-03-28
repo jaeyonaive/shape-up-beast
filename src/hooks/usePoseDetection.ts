@@ -66,9 +66,9 @@ export function usePoseDetection() {
         },
         runningMode: 'VIDEO' as const,
         numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
+        minPoseDetectionConfidence: 0.4,
+        minPosePresenceConfidence: 0.4,
+        minTrackingConfidence: 0.4,
       };
 
       try {
