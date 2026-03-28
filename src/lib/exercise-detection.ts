@@ -59,19 +59,19 @@ const SQUAT_STANDING_ANGLE = 158;
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
-  squats: 8,
+  high_knees: 6,
   jumping_jacks: 5,
   lunges: 12,
 };
 
 export const EXERCISE_LABELS: Record<ExerciseType, string> = {
-  squats: 'Squats',
+  high_knees: 'High Knees',
   jumping_jacks: 'Jumping Jacks',
   lunges: 'Lunges',
 };
 
 export const CALORIES_PER_REP: Record<ExerciseType, number> = {
-  squats: 0.32,
+  high_knees: 0.2,
   jumping_jacks: 0.15,
   lunges: 0.4,
 };
