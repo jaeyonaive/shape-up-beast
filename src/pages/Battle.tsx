@@ -268,11 +268,13 @@ export default function Battle() {
           ))}
         </div>
 
-        {/* Monster with HP bar above it */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center" style={{ marginTop: '-10px' }}>
-          <div className="w-64 mb-2 z-20">
-            <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
-          </div>
+        {/* HP Bar - above everything */}
+        <div className="absolute top-20 left-3 right-3 z-30">
+          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
+        </div>
+
+        {/* Monster */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none" style={{ marginTop: '10px' }}>
           <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
         </div>
 
