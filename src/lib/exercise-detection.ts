@@ -49,11 +49,11 @@ export interface ExerciseState {
 const BODY_DETECT_FRAMES = 3;
 const CALIBRATION_TIMEOUT_MS = 4000;
 const MIN_HIP_DROP = 0.02;
-const SMOOTHING_WINDOW = 2;
-const REP_COOLDOWN_MS = 500;
+const SMOOTHING_WINDOW = 3;
+const REP_COOLDOWN_MS = 800;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 145; // degrees — below this = squatting
-const SQUAT_STANDING_ANGLE = 158;       // degrees — above this = standing
+const SQUAT_KNEE_ANGLE_THRESHOLD = 130; // degrees — below this = squatting (stricter)
+const SQUAT_STANDING_ANGLE = 160;       // degrees — above this = standing
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
