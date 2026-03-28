@@ -8,6 +8,7 @@ import {
   createExerciseState, detectExercise, DAMAGE_MAP, EXERCISE_LABELS, CALORIES_PER_REP,
   type ExerciseState, type ExerciseType,
 } from '@/lib/exercise-detection';
+import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
   WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
