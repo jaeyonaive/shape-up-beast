@@ -49,12 +49,11 @@ export interface ExerciseState {
 const BODY_DETECT_FRAMES = 3;
 const CALIBRATION_TIMEOUT_MS = 4000;
 const MIN_HIP_DROP = 0.02;
-const SMOOTHING_WINDOW = 5;
-const REP_COOLDOWN_MS = 800;
+const SMOOTHING_WINDOW = 3;
+const REP_COOLDOWN_MS = 700;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 130; // degrees — below this = squatting
-const SQUAT_STANDING_ANGLE = 160;       // degrees — above this = standing
-const JJ_ARM_BOTH_REQUIRED = true;      // require both arms up
+const SQUAT_KNEE_ANGLE_THRESHOLD = 140; // degrees — below this = squatting
+const SQUAT_STANDING_ANGLE = 155;       // degrees — above this = standing
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -285,9 +284,9 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   const threshold = state._threshold;
   const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
 
-  // Use BOTH knee angle and hip position for accuracy
-  const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD && smoothedHipY > threshold;
-  const isStanding = kneeAngle > SQUAT_STANDING_ANGLE && smoothedHipY <= standingZone;
+  // Use EITHER knee angle OR hip position (more forgiving)
+  const isSquatting = kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD || smoothedHipY > threshold;
+  const isStanding = (kneeAngle > SQUAT_STANDING_ANGLE || smoothedHipY <= standingZone) && smoothedHipY <= standingZone;
 
   if (state.phase === 'standing') {
     if (isSquatting) {
@@ -335,9 +334,8 @@ function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, ti
   const armSpread = getArmSpread(_landmarks);
   const legSpread = getLegSpread(_landmarks);
   
-  // Require BOTH arms up for open position (more accurate)
-  const armsUp = JJ_ARM_BOTH_REQUIRED ? armSpread >= 2 : armSpread >= 1;
-  const isOpen = armsUp && legSpread > 1.1;
+  // At least one arm up + legs spread = open
+  const isOpen = armSpread >= 1 && legSpread > 1.1;
   const isClosed = armSpread === 0 && legSpread < 1.3;
 
   if (state.phase === 'closed') {
