@@ -64,26 +64,33 @@ export default function Battle() {
             setWorkoutComplete(true);
             return 0;
           }
-          setPhaseIndex(nextIdx);
-          // Reset exercise state for new phase
-          const newExState = createExerciseState(WORKOUT_PHASES[nextIdx].exercise);
-          // Skip calibration if body already detected
-          newExState.calibrated = true;
-          newExState.bodyDetected = true;
-          newExState.calibrationProgress = 100;
-          switch (WORKOUT_PHASES[nextIdx].exercise) {
-            case 'squats': newExState.phase = 'standing'; break;
-            case 'jumping_jacks': newExState.phase = 'closed'; break;
-            case 'lunges': newExState.phase = 'lunge_standing'; break;
-          }
-          // Copy calibration data from current state
-          newExState._standingHipY = exerciseStateRef.current._standingHipY;
-          newExState._squatHipY = exerciseStateRef.current._squatHipY;
-          newExState._threshold = exerciseStateRef.current._threshold;
-          exerciseStateRef.current = newExState;
-          prevRepRef.current = 0;
-          setDisplayState({ ...newExState });
-          return WORKOUT_PHASES[nextIdx].duration;
+          
+          // Show transition overlay
+          const nextPhase = WORKOUT_PHASES[nextIdx];
+          setPhaseTransition({ label: nextPhase.label, emoji: nextPhase.emoji });
+          
+          // After 3s countdown, start new phase
+          setTimeout(() => {
+            setPhaseIndex(nextIdx);
+            const newExState = createExerciseState(nextPhase.exercise);
+            newExState.calibrated = true;
+            newExState.bodyDetected = true;
+            newExState.calibrationProgress = 100;
+            switch (nextPhase.exercise) {
+              case 'squats': newExState.phase = 'standing'; break;
+              case 'jumping_jacks': newExState.phase = 'closed'; break;
+              case 'lunges': newExState.phase = 'lunge_standing'; break;
+            }
+            newExState._standingHipY = exerciseStateRef.current._standingHipY;
+            newExState._squatHipY = exerciseStateRef.current._squatHipY;
+            newExState._threshold = exerciseStateRef.current._threshold;
+            exerciseStateRef.current = newExState;
+            prevRepRef.current = 0;
+            setDisplayState({ ...newExState });
+            setPhaseTransition(null);
+          }, 3000);
+          
+          return nextPhase.duration;
         }
         return t - 1;
       });
