@@ -117,7 +117,7 @@ export function usePoseDetection() {
             setLandmarks(null);
           }
         } catch (e) {
-          console.warn('[FitMon] Frame error:', e);
+          console.warn('[Fitnasia] Frame error:', e);
         }
 
         if (activeRef.current) {
