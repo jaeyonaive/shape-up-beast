@@ -24,7 +24,7 @@ export function MonsterDisplay({ imageKey, isHit }: MonsterDisplayProps) {
   }, [isHit]);
 
   return (
-    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
+    <div className="pointer-events-none">
       <img
         src={monsterImages[imageKey]}
         alt="Monster"

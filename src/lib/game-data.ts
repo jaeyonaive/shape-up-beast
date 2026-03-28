@@ -27,9 +27,9 @@ export function getComboMultiplier(streak: number): number {
 }
 
 export function getComboLabel(streak: number): string | null {
-  if (streak >= 20) return `x${streak} 🔥🔥🔥 UNSTOPPABLE!`;
-  if (streak >= 15) return `x${streak} 🔥🔥 ON FIRE!`;
-  if (streak >= 10) return `x${streak} 🔥 COMBO!`;
+  if (streak >= 20) return `x${streak} UNSTOPPABLE!`;
+  if (streak >= 15) return `x${streak} ON FIRE!`;
+  if (streak >= 10) return `x${streak} COMBO!`;
   if (streak >= 5) return `x${streak} combo`;
   if (streak >= 3) return `x${streak}`;
   return null;
@@ -44,8 +44,8 @@ export interface WorkoutPhase {
 }
 
 export const WORKOUT_PHASES: WorkoutPhase[] = [
-  { exercise: 'squats', duration: 45, label: 'Squats', emoji: '🏋️' },
-  { exercise: 'jumping_jacks', duration: 45, label: 'Jumping Jacks', emoji: '⭐' },
+  { exercise: 'squats', duration: 30, label: 'Squats', emoji: '🏋️' },
+  { exercise: 'jumping_jacks', duration: 30, label: 'Jumping Jacks', emoji: '⭐' },
 ];
 
 export function getDefaultGameState(): GameState {
