@@ -3,6 +3,32 @@ import { type Landmark } from '@/lib/pose-detection';
 // @ts-ignore - mediapipe tasks-vision types
 import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
+const CORE_VISIBILITY_THRESHOLD = 0.55;
+const LANDMARK_SMOOTHING = 0.35;
+const MAX_UNSTABLE_FRAMES = 6;
+
+function hasStableCorePose(points: Landmark[]) {
+  const coreIndices = [11, 12, 23, 24];
+  return coreIndices.every((idx) => {
+    const point = points[idx];
+    return point && (point.visibility ?? 0) >= CORE_VISIBILITY_THRESHOLD;
+  });
+}
+
+function smoothLandmarks(points: Landmark[], previous: Landmark[] | null): Landmark[] {
+  if (!previous || previous.length !== points.length) return points;
+
+  return points.map((point, index) => {
+    const prev = previous[index] ?? point;
+    return {
+      x: prev.x + (point.x - prev.x) * LANDMARK_SMOOTHING,
+      y: prev.y + (point.y - prev.y) * LANDMARK_SMOOTHING,
+      z: prev.z + (point.z - prev.z) * LANDMARK_SMOOTHING,
+      visibility: Math.max(point.visibility ?? 0, prev.visibility ?? 0),
+    };
+  });
+}
+
 export function usePoseDetection() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [landmarks, setLandmarks] = useState<Landmark[] | null>(null);
@@ -15,13 +41,14 @@ export function usePoseDetection() {
   const rafRef = useRef<number>(0);
   const activeRef = useRef(false);
   const lastTimestampRef = useRef(-1);
+  const smoothedLandmarksRef = useRef<Landmark[] | null>(null);
+  const unstableFramesRef = useRef(0);
 
   const startCamera = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
 
-      // Create hidden video element
       if (!videoRef.current) {
         const video = document.createElement('video');
         video.setAttribute('autoplay', '');
@@ -39,10 +66,14 @@ export function usePoseDetection() {
         videoRef.current = video;
       }
 
-      // Start camera and model load in parallel
       const [cameraStream, vision] = await Promise.all([
         navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 1280 } },
+          video: {
+            facingMode: 'user',
+            width: { ideal: 720 },
+            height: { ideal: 1280 },
+            aspectRatio: { ideal: 9 / 16 },
+          },
           audio: false,
         }),
         FilesetResolver.forVisionTasks(
@@ -50,14 +81,30 @@ export function usePoseDetection() {
         ),
       ]);
 
+      const videoTrack = cameraStream.getVideoTracks()[0] as MediaStreamTrack & {
+        getCapabilities?: () => { zoom?: { min?: number } };
+        applyConstraints?: (constraints: MediaTrackConstraints) => Promise<void>;
+      };
+
+      try {
+        const capabilities = videoTrack.getCapabilities?.();
+        const minZoom = capabilities?.zoom?.min;
+        if (typeof minZoom === 'number' && videoTrack.applyConstraints) {
+          await videoTrack.applyConstraints({
+            advanced: [{ zoom: minZoom }],
+          } as MediaTrackConstraints);
+        }
+      } catch (zoomError) {
+        console.warn('[Fitnasia] Camera zoom constraint not supported:', zoomError);
+      }
+
       streamRef.current = cameraStream;
       setStream(cameraStream);
       const video = videoRef.current;
-      video.srcObject = cameraStream; // FIX: was using stale `stream` state
+      video.srcObject = cameraStream;
       await video.play();
       console.log('[Fitnasia] Camera started:', video.videoWidth, 'x', video.videoHeight);
 
-      // Use LITE model — try GPU first, fall back to CPU
       let poseLandmarker: PoseLandmarker;
       const modelOptions = {
         baseOptions: {
@@ -82,13 +129,15 @@ export function usePoseDetection() {
         });
         console.log('[Fitnasia] PoseLandmarker initialized (CPU fallback)');
       }
+
       landmarkerRef.current = poseLandmarker;
       activeRef.current = true;
       setCameraActive(true);
       setIsLoading(false);
       lastTimestampRef.current = -1;
+      smoothedLandmarksRef.current = null;
+      unstableFramesRef.current = 0;
 
-      // Detection loop
       const processFrame = () => {
         if (!activeRef.current || !landmarkerRef.current) return;
         if (!video || video.readyState < 2) {
@@ -106,15 +155,33 @@ export function usePoseDetection() {
         try {
           const result = landmarkerRef.current.detectForVideo(video, now);
           if (result.landmarks && result.landmarks.length > 0) {
-            const poseLandmarks: Landmark[] = result.landmarks[0].map((lm: any) => ({
+            const rawLandmarks: Landmark[] = result.landmarks[0].map((lm: any) => ({
               x: lm.x,
               y: lm.y,
               z: lm.z,
               visibility: lm.visibility ?? 1,
             }));
-            setLandmarks(poseLandmarks);
+
+            if (hasStableCorePose(rawLandmarks)) {
+              unstableFramesRef.current = 0;
+              const nextLandmarks = smoothLandmarks(rawLandmarks, smoothedLandmarksRef.current);
+              smoothedLandmarksRef.current = nextLandmarks;
+              setLandmarks(nextLandmarks);
+            } else {
+              unstableFramesRef.current += 1;
+              if (unstableFramesRef.current > MAX_UNSTABLE_FRAMES) {
+                smoothedLandmarksRef.current = null;
+                setLandmarks(null);
+              } else if (smoothedLandmarksRef.current) {
+                setLandmarks(smoothedLandmarksRef.current);
+              }
+            }
           } else {
-            setLandmarks(null);
+            unstableFramesRef.current += 1;
+            if (unstableFramesRef.current > MAX_UNSTABLE_FRAMES) {
+              smoothedLandmarksRef.current = null;
+              setLandmarks(null);
+            }
           }
         } catch (e) {
           console.warn('[Fitnasia] Frame error:', e);
@@ -124,8 +191,8 @@ export function usePoseDetection() {
           rafRef.current = requestAnimationFrame(processFrame);
         }
       };
-      rafRef.current = requestAnimationFrame(processFrame);
 
+      rafRef.current = requestAnimationFrame(processFrame);
     } catch (err: any) {
       console.error('[Fitnasia] Camera/Pose error:', err);
       if (err.name === 'NotAllowedError') {
@@ -144,11 +211,13 @@ export function usePoseDetection() {
       rafRef.current = 0;
     }
     if (landmarkerRef.current) {
-      try { landmarkerRef.current.close(); } catch {}
+      try {
+        landmarkerRef.current.close();
+      } catch {}
       landmarkerRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -156,13 +225,17 @@ export function usePoseDetection() {
       videoRef.current.remove();
       videoRef.current = null;
     }
+    smoothedLandmarksRef.current = null;
+    unstableFramesRef.current = 0;
     setCameraActive(false);
     setLandmarks(null);
     setStream(null);
   }, []);
 
   useEffect(() => {
-    return () => { stopCamera(); };
+    return () => {
+      stopCamera();
+    };
   }, [stopCamera]);
 
   return { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream };
