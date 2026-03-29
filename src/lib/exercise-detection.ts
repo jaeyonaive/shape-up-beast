@@ -48,7 +48,7 @@ export interface ExerciseState {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 3;
+const BODY_DETECT_FRAMES = 8;
 const CALIBRATION_TIMEOUT_MS = 5000;
 const MIN_HIP_DROP = 0.02;
 const SMOOTHING_WINDOW = 3;
@@ -118,12 +118,26 @@ function getMidHipY(landmarks: Landmark[]): number {
 }
 
 function hasFullBody(landmarks: Landmark[]): boolean {
-  // Only require shoulders + hips — knees are optional (close to camera)
+  // Require shoulders + hips with HIGH visibility to prevent ghost detections
   const required = [
     POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER,
     POSE.LEFT_HIP, POSE.RIGHT_HIP,
   ];
-  return required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.1);
+  // All required landmarks must have visibility > 0.65 (strict)
+  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.65)) {
+    return false;
+  }
+  // Additional check: shoulders and hips must be in reasonable positions (not noise)
+  const lS = landmarks[POSE.LEFT_SHOULDER];
+  const rS = landmarks[POSE.RIGHT_SHOULDER];
+  const lH = landmarks[POSE.LEFT_HIP];
+  const rH = landmarks[POSE.RIGHT_HIP];
+  // Shoulders should be above hips
+  if (lS.y >= lH.y || rS.y >= rH.y) return false;
+  // Shoulder width should be reasonable (not a tiny noise point)
+  const shoulderWidth = Math.abs(rS.x - lS.x);
+  if (shoulderWidth < 0.05) return false;
+  return true;
 }
 
 export function hasKneesVisible(landmarks: Landmark[]): boolean {

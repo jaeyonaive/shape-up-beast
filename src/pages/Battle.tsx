@@ -324,12 +324,6 @@ export default function Battle() {
       <div className="relative flex-1 bg-black">
         <CameraOverlay stream={stream} landmarks={landmarks} />
         
-        {/* Body silhouette guide - shown during calibration */}
-        <BodySilhouette
-          visible={!gameActive && started}
-          bodyDetected={displayState.bodyDetected}
-          kneesVisible={displayState.kneesVisible}
-        />
         {/* Feedback overlay - always on top of camera area */}
         <div className="absolute bottom-3 left-3 right-3 z-30">
           {!gameActive && (
