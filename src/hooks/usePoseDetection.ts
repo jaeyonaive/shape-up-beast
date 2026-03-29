@@ -87,11 +87,11 @@ export function usePoseDetection() {
       };
 
       try {
-        const capabilities = videoTrack.getCapabilities?.();
+        const capabilities = videoTrack.getCapabilities?.() as { zoom?: { min?: number } } | undefined;
         const minZoom = capabilities?.zoom?.min;
         if (typeof minZoom === 'number' && videoTrack.applyConstraints) {
           await videoTrack.applyConstraints({
-            advanced: [{ zoom: minZoom }],
+            advanced: [{ zoom: minZoom } as MediaTrackConstraintSet],
           } as MediaTrackConstraints);
         }
       } catch (zoomError) {
