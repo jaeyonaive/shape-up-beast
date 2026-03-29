@@ -48,7 +48,7 @@ export interface ExerciseState {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 3;
+const BODY_DETECT_FRAMES = 8;
 const CALIBRATION_TIMEOUT_MS = 5000;
 const MIN_HIP_DROP = 0.02;
 const SMOOTHING_WINDOW = 3;
