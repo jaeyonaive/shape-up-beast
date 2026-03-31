@@ -33,6 +33,8 @@ export default function Battle() {
   const [isHit, setIsHit] = useState(false);
   const [damageText, setDamageText] = useState<string | null>(null);
   const [comboText, setComboText] = useState<string | null>(null);
+  const [gameMessage, setGameMessage] = useState<string | null>(null);
+  const gameMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [started, setStarted] = useState(false);
   const [gameActive, setGameActive] = useState(false);
   const [sessionOver, setSessionOver] = useState(false);
