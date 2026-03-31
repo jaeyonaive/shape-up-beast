@@ -14,8 +14,7 @@ import {
   getComboMultiplier, getComboLabel,
 } from '@/lib/game-data';
 import { Button } from '@/components/ui/button';
-import battleBgForest from '@/assets/battle-bg-forest.jpg';
-import coinImg from '@/assets/coin.png';
+import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
 
 export default function Battle() {
   const navigate = useNavigate();
@@ -101,6 +100,19 @@ export default function Battle() {
     }, 500);
     return () => clearInterval(interval);
   }, [gameActive, sessionOver]);
+
+  useEffect(() => {
+    if (!gameActive || sessionOver) return;
+    if (displayState.feedback === 'No body detected') {
+      setComboText(prev => (prev?.startsWith('x') ? prev : 'No body detected'));
+      return;
+    }
+    if (displayState.feedback === 'Tracking active') {
+      setComboText(prev => (prev?.startsWith('x') ? prev : 'Tracking active'));
+      return;
+    }
+    setComboText(prev => (prev === 'No body detected' || prev === 'Tracking active' ? null : prev));
+  }, [displayState.feedback, gameActive, sessionOver]);
 
   // Exercise detection
   useEffect(() => {
