@@ -34,6 +34,7 @@ export interface ExerciseState {
   _standingHipY: number;
   _squatHipY: number;
   _threshold: number;
+  _squatDropRatio: number;
   _reachedDepth: boolean;
   _baselineSquatDone: boolean;
 
@@ -50,12 +51,16 @@ export interface ExerciseState {
 
 const BODY_DETECT_FRAMES = 8;
 const CALIBRATION_TIMEOUT_MS = 5000;
-const MIN_HIP_DROP = 0.02;
 const SMOOTHING_WINDOW = 3;
-const REP_COOLDOWN_MS = 700;
+const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
 const SQUAT_KNEE_ANGLE_THRESHOLD = 140;
 const SQUAT_STANDING_ANGLE = 158;
+const SQUAT_DEFAULT_DROP_RATIO = 0.22;
+const SQUAT_MIN_DROP_RATIO = 0.2;
+const SQUAT_MAX_DROP_RATIO = 0.25;
+const SQUAT_RETURN_RATIO = 0.08;
+const SQUAT_NOISE_Y = 0.012;
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -99,6 +104,7 @@ export function createExerciseState(exerciseType: ExerciseType): ExerciseState {
     _standingHipY: 0,
     _squatHipY: 0,
     _threshold: 0,
+    _squatDropRatio: SQUAT_DEFAULT_DROP_RATIO,
     _reachedDepth: false,
     _baselineSquatDone: false,
     _jjArmThreshold: 0,
@@ -118,32 +124,50 @@ function getMidHipY(landmarks: Landmark[]): number {
 }
 
 function hasFullBody(landmarks: Landmark[]): boolean {
-  // Require shoulders + hips with HIGH visibility to prevent ghost detections
+  // Require shoulders + hips + knees for rep counting
   const required = [
     POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER,
     POSE.LEFT_HIP, POSE.RIGHT_HIP,
+    POSE.LEFT_KNEE, POSE.RIGHT_KNEE,
   ];
-  // All required landmarks must have visibility > 0.65 (strict)
-  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.65)) {
+
+  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.45)) {
     return false;
   }
-  // Additional check: shoulders and hips must be in reasonable positions (not noise)
+
   const lS = landmarks[POSE.LEFT_SHOULDER];
   const rS = landmarks[POSE.RIGHT_SHOULDER];
   const lH = landmarks[POSE.LEFT_HIP];
   const rH = landmarks[POSE.RIGHT_HIP];
-  // Shoulders should be above hips
+  const lK = landmarks[POSE.LEFT_KNEE];
+  const rK = landmarks[POSE.RIGHT_KNEE];
+
+  // Anatomical ordering (top -> bottom)
   if (lS.y >= lH.y || rS.y >= rH.y) return false;
-  // Shoulder width should be reasonable (not a tiny noise point)
+  if (lH.y >= lK.y || rH.y >= rK.y) return false;
+
   const shoulderWidth = Math.abs(rS.x - lS.x);
-  if (shoulderWidth < 0.05) return false;
+  if (shoulderWidth < 0.03) return false;
+
   return true;
 }
 
 export function hasKneesVisible(landmarks: Landmark[]): boolean {
   const lKnee = landmarks[POSE.LEFT_KNEE];
   const rKnee = landmarks[POSE.RIGHT_KNEE];
-  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.3 && (rKnee.visibility ?? 0) > 0.3);
+  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.4 && (rKnee.visibility ?? 0) > 0.4);
+}
+
+function getBodyHeight(landmarks: Landmark[]): number {
+  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
+  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
+  const lKnee = landmarks[POSE.LEFT_KNEE];
+  const rKnee = landmarks[POSE.RIGHT_KNEE];
+  if (!lShoulder || !rShoulder || !lKnee || !rKnee) return 0;
+
+  const shoulderY = (lShoulder.y + rShoulder.y) / 2;
+  const kneeY = (lKnee.y + rKnee.y) / 2;
+  return Math.max(0, kneeY - shoulderY);
 }
 
 function smoothY(history: number[], newVal: number): { smoothed: number; history: number[] } {
@@ -215,21 +239,22 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   // Body visibility check
   if (!hasFullBody(landmarks)) {
     const occ = prevState._occludedFrames + 1;
-    if (occ > MAX_OCCLUSION_FRAMES) {
-      return {
-        ...prevState,
-        feedback: 'Move into frame — make sure your whole body is visible',
-        formQuality: 'neutral',
-        bodyDetected: false,
-        kneesVisible: kneesVis,
-        _occludedFrames: occ,
-      };
-    }
-    return { ...prevState, _occludedFrames: occ, kneesVisible: kneesVis };
+    return {
+      ...prevState,
+      feedback: 'No body detected',
+      formQuality: 'neutral',
+      bodyDetected: false,
+      kneesVisible: kneesVis,
+      _occludedFrames: Math.min(occ, MAX_OCCLUSION_FRAMES),
+      _bodyDetectFrames: 0,
+    };
   }
 
   const hipY = getMidHipY(landmarks);
-  if (hipY < 0) return { ...prevState, feedback: 'Move into frame', kneesVisible: kneesVis };
+  const bodyHeight = getBodyHeight(landmarks);
+  if (hipY < 0 || bodyHeight <= 0) {
+    return { ...prevState, feedback: 'No body detected', bodyDetected: false, kneesVisible: kneesVis };
+  }
 
   const { smoothed: smoothedHipY, history: newHipYHistory } = smoothY(prevState._hipYHistory, hipY);
   let state: ExerciseState = {
@@ -261,17 +286,13 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
   // ═══ CALIBRATING: capture standing position, then ask for one squat ═══
   if (prevState.phase === 'calibrating') {
-    // Knees not required — just helpful hint
-    if (!kneesVis) {
-      state.feedback = 'Knees not visible — detection may use hip position only';
-    }
-
     const elapsed = now - prevState._calibStartTime;
 
     // Record standing hip Y for 1.5 seconds
     if (elapsed < 1500) {
       state._calibMinHipY = Math.min(prevState._calibMinHipY, smoothedHipY);
       state._calibMaxHipY = Math.max(prevState._calibMaxHipY, smoothedHipY);
+      state._standingHipY = (state._calibMinHipY + state._calibMaxHipY) / 2;
       state.calibrationProgress = Math.min(40, Math.round(20 + (elapsed / 1500) * 20));
       state.feedback = 'Stand straight... capturing your height';
       state.formQuality = 'neutral';
@@ -280,15 +301,16 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
     // After 1.5s of standing, save standing position & ask for a squat
     if (!prevState._baselineSquatDone) {
-      state._standingHipY = prevState._calibMinHipY;
+      state._standingHipY = prevState._standingHipY || prevState._calibMinHipY;
 
       // Check if they've performed a squat (hip dropped significantly)
-      const hipDrop = smoothedHipY - state._standingHipY;
+      const hipDropRatio = (smoothedHipY - state._standingHipY) / bodyHeight;
 
-      if (hipDrop > 0.04) {
+      if (hipDropRatio >= SQUAT_MIN_DROP_RATIO) {
         // They squatted! Record it
         state._squatHipY = smoothedHipY;
-        state._threshold = state._standingHipY + (smoothedHipY - state._standingHipY) * 0.4;
+        state._squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, Math.max(SQUAT_MIN_DROP_RATIO, hipDropRatio * 0.85));
+        state._threshold = state._standingHipY + bodyHeight * state._squatDropRatio;
         state._baselineSquatDone = true;
         state.calibrationProgress = 90;
         state.feedback = 'Great squat! Stand back up...';
@@ -298,8 +320,9 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
       // Timeout: use defaults after 5 seconds total
       if (elapsed >= CALIBRATION_TIMEOUT_MS) {
-        state._squatHipY = state._standingHipY + 0.08;
-        state._threshold = state._standingHipY + 0.032;
+        state._squatDropRatio = SQUAT_DEFAULT_DROP_RATIO;
+        state._squatHipY = state._standingHipY + bodyHeight * state._squatDropRatio;
+        state._threshold = state._standingHipY + bodyHeight * state._squatDropRatio;
         state._baselineSquatDone = true;
         state.calibrationProgress = 90;
         // Fall through to finish calibration
@@ -352,72 +375,61 @@ function getAvgKneeAngle(landmarks: Landmark[]): number {
 
 function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
   const kneesVis = hasKneesVisible(landmarks);
-  const kneeAngle = kneesVis ? getAvgKneeAngle(landmarks) : 999; // fallback: ignore knee if not visible
-  const threshold = state._threshold;
-  const standingZone = state._standingHipY + (threshold - state._standingHipY) * 0.3;
-  const returnZone = state._standingHipY + (threshold - state._standingHipY) * 0.5;
-  const hipDrop = smoothedHipY - state._standingHipY;
+  const kneeAngle = kneesVis ? getAvgKneeAngle(landmarks) : 999;
+  const bodyHeight = Math.max(getBodyHeight(landmarks), 0.001);
+  const prevHipY = state._hipYHistory[state._hipYHistory.length - 2] ?? smoothedHipY;
+  const hipVelocity = smoothedHipY - prevHipY;
+  const squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio || SQUAT_DEFAULT_DROP_RATIO));
 
-  // Primary: hip position. Secondary: knee angle (only if knees visible)
-  const hipDeep = hipDrop > (threshold - state._standingHipY) * 0.85;
-  const kneeDeep = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
-  const isDeepEnough = hipDeep || kneeDeep;
+  const downThresholdY = state._standingHipY + bodyHeight * squatDropRatio;
+  const returnThresholdY = state._standingHipY + bodyHeight * SQUAT_RETURN_RATIO;
+  const startMoveY = state._standingHipY + bodyHeight * 0.06;
 
-  const hipDescending = hipDrop > (threshold - state._standingHipY) * 0.3;
-  const kneeDescending = kneesVis && kneeAngle < 152;
-  const isDescending = hipDescending || kneeDescending;
+  const deepByHip = smoothedHipY >= downThresholdY;
+  const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
+  const isDeepEnough = deepByHip || deepByKnee;
 
-  const hipRecovered = smoothedHipY <= returnZone;
-  const kneeRecovered = kneesVis && kneeAngle > 152;
-  const isRecovered = hipRecovered && (!kneesVis || kneeRecovered);
+  const movingDown = hipVelocity > SQUAT_NOISE_Y;
+  const backToStanding = smoothedHipY <= returnThresholdY;
 
-  const hipStanding = smoothedHipY <= standingZone;
-  const kneeStanding = !kneesVis || kneeAngle > SQUAT_STANDING_ANGLE;
-  const isStanding = hipStanding && kneeStanding;
+  // Dynamic standing baseline drift correction to ignore tiny posture changes.
+  if (!state._reachedDepth && state.phase === 'standing') {
+    state._standingHipY = state._standingHipY * 0.92 + smoothedHipY * 0.08;
+  }
 
-  if (state.phase === 'standing') {
+  if (!state._reachedDepth) {
     if (isDeepEnough) {
       state.phase = 'at_bottom';
       state._reachedDepth = true;
-      state.feedback = 'Good depth! Come back up!';
+      state.feedback = 'Good depth! Stand up!';
       state.formQuality = 'good';
-    } else if (isDescending) {
-      state.phase = 'descending';
-      state.feedback = 'Going down... keep going!';
-      state.formQuality = 'neutral';
-    } else {
-      state.feedback = 'Tracking active';
-      state.formQuality = 'neutral';
+      return state;
     }
+
+    if (movingDown && smoothedHipY >= startMoveY) {
+      state.phase = 'descending';
+      state.feedback = 'Going down...';
+    } else {
+      state.phase = 'standing';
+      state.feedback = 'Tracking active';
+    }
+    state.formQuality = 'neutral';
     return state;
   }
 
-  if (state.phase === 'descending' || state.phase === 'at_bottom' || state.phase === 'ascending') {
-    if (isDeepEnough) {
-      state._reachedDepth = true;
-      state.phase = 'at_bottom';
-      state.feedback = 'Good! Come back up!';
-      state.formQuality = 'good';
-      return state;
-    }
-
-    if (state._reachedDepth && isRecovered && timeSinceRep >= REP_COOLDOWN_MS) {
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state._reachedDepth = false;
-      state.phase = 'standing';
-      state.feedback = `Rep ${state.repCount}!`;
-      state.formQuality = 'good';
-      return state;
-    }
-
-    state.phase = isStanding ? 'standing' : 'ascending';
-    state.feedback = 'Nice! Keep coming up!';
+  if (state._reachedDepth && backToStanding && timeSinceRep >= REP_COOLDOWN_MS) {
+    state.repCount += 1;
+    state._lastRepTime = now;
+    state._reachedDepth = false;
+    state.phase = 'standing';
+    state.feedback = `Rep ${state.repCount}!`;
     state.formQuality = 'good';
     return state;
   }
 
-  state.phase = 'standing';
+  state.phase = 'ascending';
+  state.feedback = 'Come back up...';
+  state.formQuality = 'good';
   return state;
 }
 
