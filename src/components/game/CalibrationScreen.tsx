@@ -67,11 +67,11 @@ export function CalibrationScreen({
   }, [landmarks]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
-      {/* Full-screen camera — NO container, NO cropping */}
+    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+      {/* Full-screen camera — object-contain, NO zoom, NO crop, letterboxing allowed */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover"
+        className="absolute inset-0 w-full h-full object-contain"
         autoPlay playsInline muted
         style={{ transform: 'scaleX(-1)' }}
       />
@@ -87,7 +87,7 @@ export function CalibrationScreen({
         }}
       />
 
-      {/* Minimal overlay text only */}
+      {/* Minimal overlay — matching existing game UI style */}
       <div className="absolute bottom-8 left-4 right-4 z-10">
         <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
           <p className="font-pixel text-[10px] text-primary mb-1.5 tracking-widest">
