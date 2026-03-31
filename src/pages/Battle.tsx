@@ -126,6 +126,49 @@ export default function Battle() {
     setComboText(prev => (prev === 'No body detected' || prev === 'Tracking active' ? null : prev));
   }, [displayState.feedback, gameActive, sessionOver]);
 
+  // Trigger monster attack (dodge phase)
+  const triggerMonsterAttack = useCallback(() => {
+    if (dodgePhase !== 'idle') return;
+    setDodgePhase('warning');
+    dodgeSuccess.current = false;
+    dodgeBaseHipX.current = null; // will be set on next landmark frame
+
+    if (gameMessageTimer.current) clearTimeout(gameMessageTimer.current);
+    setGameMessage('⚠️ Monster attacks! Move left or right to dodge!');
+
+    dodgeTimerRef.current = setTimeout(() => {
+      setDodgePhase('result');
+      if (dodgeSuccess.current) {
+        setGameMessage('✅ Dodge successful!');
+      } else {
+        setPlayerHP(hp => Math.max(0, hp - MONSTER_ATTACK_DAMAGE));
+        setGameMessage(`💔 Ouch! You took ${MONSTER_ATTACK_DAMAGE} damage!`);
+      }
+      gameMessageTimer.current = setTimeout(() => {
+        setGameMessage(null);
+        setDodgePhase('idle');
+      }, 1500);
+    }, DODGE_WINDOW_MS);
+  }, [dodgePhase]);
+
+  // Detect dodge movement during warning phase
+  useEffect(() => {
+    if (dodgePhase !== 'warning' || !landmarks) return;
+    const leftHip = landmarks[23];
+    const rightHip = landmarks[24];
+    if (!leftHip || !rightHip || leftHip.visibility < 0.5 || rightHip.visibility < 0.5) return;
+
+    const hipX = (leftHip.x + rightHip.x) / 2;
+    if (dodgeBaseHipX.current === null) {
+      dodgeBaseHipX.current = hipX;
+      return;
+    }
+    const delta = Math.abs(hipX - dodgeBaseHipX.current);
+    if (delta >= DODGE_THRESHOLD) {
+      dodgeSuccess.current = true;
+    }
+  }, [landmarks, dodgePhase]);
+
   useEffect(() => {
     if (!landmarks || !started || sessionOver || workoutComplete) return;
     const newState = detectExercise(landmarks, exerciseStateRef.current);
@@ -135,7 +178,7 @@ export default function Battle() {
     if (newState.calibrated && !gameActive) setGameActive(true);
 
     const isActive = gameActive || newState.calibrated;
-    if (newState.repCount > prevRepRef.current && isActive) {
+    if (newState.repCount > prevRepRef.current && isActive && dodgePhase === 'idle') {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
 
@@ -165,10 +208,9 @@ export default function Battle() {
       setIsHit(true);
       setDamageText(`-${damage}`);
 
-      // Gamified bottom message
       const messages = [
         `💥 You dealt ${damage} damage!`,
-        `🔥 Squat registered! -${damage} HP`,
+        `🔥 Rep registered! -${damage} HP`,
         `⚔️ Critical hit! ${damage} damage!`,
         `💪 Nice rep! Monster took ${damage}!`,
       ];
@@ -178,8 +220,16 @@ export default function Battle() {
       gameMessageTimer.current = setTimeout(() => setGameMessage(null), 1800);
 
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
+
+      // Check if monster should attack
+      repsSinceLastAttack.current += 1;
+      if (repsSinceLastAttack.current >= ATTACK_EVERY_N_REPS) {
+        repsSinceLastAttack.current = 0;
+        // Delay attack slightly so player sees their damage first
+        setTimeout(() => triggerMonsterAttack(), 1200);
+      }
     }
-  }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
+  }, [landmarks, started, sessionOver, gameActive, workoutComplete, dodgePhase, triggerMonsterAttack]);
 
   useEffect(() => {
     if (monsterDefeated) {
