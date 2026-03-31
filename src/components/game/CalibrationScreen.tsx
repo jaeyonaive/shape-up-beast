@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/button';
 import { type Landmark, drawPose } from '@/lib/pose-detection';
 
@@ -31,6 +31,7 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [needsRotation, setNeedsRotation] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -46,7 +47,7 @@ export function CalibrationScreen({
         video.srcObject = stream;
         await video.play();
         if (!cancelled) {
-          setVideoReady(true);
+          setVideoReady(video.readyState >= 2);
         }
       } catch (attachError) {
         console.error('[Fitnasia] Calibration preview failed:', attachError);
@@ -67,19 +68,23 @@ export function CalibrationScreen({
     const video = videoRef.current;
     if (!video) return;
 
-    const updateReadyState = () => {
-      setVideoReady(video.readyState >= 2 && !!video.videoWidth && !!video.videoHeight);
+    const updateMetrics = () => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      setVideoReady(video.readyState >= 2);
+      setNeedsRotation(video.videoWidth > video.videoHeight && window.innerHeight > window.innerWidth);
     };
 
-    video.addEventListener('loadedmetadata', updateReadyState);
-    video.addEventListener('canplay', updateReadyState);
-    video.addEventListener('resize', updateReadyState);
-    const interval = setInterval(updateReadyState, 300);
+    video.addEventListener('loadedmetadata', updateMetrics);
+    video.addEventListener('canplay', updateMetrics);
+    video.addEventListener('resize', updateMetrics);
+    window.addEventListener('resize', updateMetrics);
+    const interval = setInterval(updateMetrics, 300);
 
     return () => {
-      video.removeEventListener('loadedmetadata', updateReadyState);
-      video.removeEventListener('canplay', updateReadyState);
-      video.removeEventListener('resize', updateReadyState);
+      video.removeEventListener('loadedmetadata', updateMetrics);
+      video.removeEventListener('canplay', updateMetrics);
+      video.removeEventListener('resize', updateMetrics);
+      window.removeEventListener('resize', updateMetrics);
       clearInterval(interval);
     };
   }, [stream]);
@@ -101,16 +106,20 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoReady]);
 
-  const mediaStyle = {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    width: '100vw',
-    height: '100vh',
-    objectFit: 'contain' as const,
-    objectPosition: 'center center' as const,
-    transform: 'scaleX(-1)',
-    transformOrigin: 'center center' as const,
+  const sharedMediaStyle: CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: needsRotation ? '100vh' : '100vw',
+    height: needsRotation ? '100vw' : '100vh',
+    objectFit: 'contain',
+    objectPosition: 'center center',
+    transform: needsRotation
+      ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
+      : 'translate(-50%, -50%) scaleX(-1)',
+    transformOrigin: 'center center',
+    maxWidth: 'none',
+    maxHeight: 'none',
     background: 'transparent',
   };
 
@@ -144,12 +153,12 @@ export function CalibrationScreen({
           autoPlay
           playsInline
           muted
-          style={mediaStyle}
+          style={sharedMediaStyle}
         />
         <canvas
           ref={canvasRef}
           style={{
-            ...mediaStyle,
+            ...sharedMediaStyle,
             pointerEvents: 'none',
           }}
         />
