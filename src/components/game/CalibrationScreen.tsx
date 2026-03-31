@@ -1,4 +1,4 @@
-import { type Landmark, drawPose } from '@/lib/pose-detection';
+import { type CSSProperties, type Landmark, drawPose } from '@/lib/pose-detection';
 import { useRef, useEffect, useState } from 'react';
 
 interface CalibrationScreenProps {
@@ -21,8 +21,8 @@ export function CalibrationScreen({
 }: CalibrationScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
 
   useEffect(() => {
     const video = videoRef.current;
@@ -35,42 +35,22 @@ export function CalibrationScreen({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
+
     const updateRect = () => {
       if (!video.videoWidth || !video.videoHeight) return;
 
-      // Detect if camera feed is landscape (wider than tall)
-      const feedIsLandscape = video.videoWidth > video.videoHeight;
-      setIsLandscape(feedIsLandscape);
-
-      // If landscape feed, we rotate it 90deg so it appears portrait.
-      // The effective dimensions after rotation swap.
-      const effectiveW = feedIsLandscape ? video.videoHeight : video.videoWidth;
-      const effectiveH = feedIsLandscape ? video.videoWidth : video.videoHeight;
-
-      const screenW = window.innerWidth;
-      const screenH = window.innerHeight;
-      const feedAspect = effectiveW / effectiveH;
-      const screenAspect = screenW / screenH;
-
-      let rW: number, rH: number, oX: number, oY: number;
-      if (feedAspect > screenAspect) {
-        rW = screenW;
-        rH = screenW / feedAspect;
-        oX = 0;
-        oY = (screenH - rH) / 2;
-      } else {
-        rH = screenH;
-        rW = screenH * feedAspect;
-        oX = (screenW - rW) / 2;
-        oY = 0;
-      }
-      setVideoRect({ top: oY, left: oX, width: rW, height: rH });
+      setIsLandscape(video.videoWidth > video.videoHeight);
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
     };
+
     video.addEventListener('loadedmetadata', updateRect);
+    video.addEventListener('resize', updateRect);
     window.addEventListener('resize', updateRect);
     const interval = setInterval(updateRect, 500);
+
     return () => {
       video.removeEventListener('loadedmetadata', updateRect);
+      video.removeEventListener('resize', updateRect);
       window.removeEventListener('resize', updateRect);
       clearInterval(interval);
     };
@@ -87,43 +67,37 @@ export function CalibrationScreen({
     drawPose(ctx, landmarks, canvas.width, canvas.height);
   }, [landmarks]);
 
-  // Build transform: mirror + optional 90deg rotation for landscape feeds
-  const videoTransform = isLandscape
-    ? 'scaleX(-1) rotate(90deg)'
-    : 'scaleX(-1)';
-  const canvasTransform = isLandscape
-    ? 'scaleX(-1) rotate(90deg)'
-    : 'scaleX(-1)';
+  const renderWidth = isLandscape ? `${viewport.height}px` : '100vw';
+  const renderHeight = isLandscape ? `${viewport.width}px` : '100vh';
+
+  const sharedCameraStyle: CSSProperties = {
+    position: 'fixed',
+    top: '50%',
+    left: '50%',
+    width: renderWidth,
+    height: renderHeight,
+    objectFit: 'contain',
+    background: '#000',
+    transform: isLandscape
+      ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
+      : 'translate(-50%, -50%) scaleX(-1)',
+    transformOrigin: 'center center',
+  };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 50, background: '#000' }}>
-      {/* Full-screen camera: position fixed, object-contain, no container */}
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          objectFit: 'contain',
-          background: '#000',
-          transform: videoTransform,
-        }}
+        style={sharedCameraStyle}
       />
       <canvas
         ref={canvasRef}
         style={{
-          position: 'fixed',
+          ...sharedCameraStyle,
           pointerEvents: 'none',
-          top: videoRect?.top ?? 0,
-          left: videoRect?.left ?? 0,
-          width: videoRect?.width ?? '100vw',
-          height: videoRect?.height ?? '100vh',
-          transform: canvasTransform,
         }}
       />
 
