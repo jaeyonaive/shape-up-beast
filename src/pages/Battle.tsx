@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { CalibrationScreen } from '@/components/game/CalibrationScreen';
 import { useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
