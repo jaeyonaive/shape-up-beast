@@ -299,6 +299,7 @@ export default function Battle() {
   }
 
   const hpPercent = Math.max(0, (monsterHP / MONSTER_MAX_HP) * 100);
+  const playerHpPercent = Math.max(0, (playerHP / PLAYER_MAX_HP) * 100);
 
   return (
     <div className="h-screen w-screen relative overflow-hidden">
