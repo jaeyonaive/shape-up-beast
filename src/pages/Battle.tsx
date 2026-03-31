@@ -18,7 +18,7 @@ import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
 
 export default function Battle() {
   const navigate = useNavigate();
-  const { landmarks, isLoading, error, startCamera, stopCamera, stream } = usePoseDetection();
+  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream } = usePoseDetection();
 
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [phaseTimeLeft, setPhaseTimeLeft] = useState(WORKOUT_PHASES[0].duration);
