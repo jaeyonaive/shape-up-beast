@@ -9,6 +9,11 @@ export interface GameState {
 }
 
 export const MONSTER_MAX_HP = 100;
+export const PLAYER_MAX_HP = 100;
+export const MONSTER_ATTACK_DAMAGE = 10;
+export const DODGE_WINDOW_MS = 2000;
+export const DODGE_THRESHOLD = 0.06; // min lateral hip movement (normalized)
+export const ATTACK_EVERY_N_REPS = 2;
 
 // Points & coins
 export const BASE_POINTS_PER_REP = 10;
