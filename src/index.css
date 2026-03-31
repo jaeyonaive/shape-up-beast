@@ -159,3 +159,46 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* ── Title screen animations ── */
+@keyframes titleEntrance {
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes titleFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes cloudDrift1 {
+  0% { transform: translateX(-30vw); }
+  100% { transform: translateX(130vw); }
+}
+
+@keyframes cloudDrift2 {
+  0% { transform: translateX(130vw); }
+  100% { transform: translateX(-30vw); }
+}
+
+@keyframes grassSway {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(1px); }
+  75% { transform: translateX(-1px); }
+}
+
+.title-entrance {
+  animation: titleEntrance 0.8s ease-out forwards, titleFloat 4s ease-in-out 0.8s infinite;
+}
+
+.cloud-drift-1 {
+  animation: cloudDrift1 35s linear infinite;
+}
+
+.cloud-drift-2 {
+  animation: cloudDrift2 45s linear infinite;
+}
+
+.grass-sway {
+  animation: grassSway 3s ease-in-out infinite;
+}
