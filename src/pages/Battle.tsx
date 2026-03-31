@@ -221,16 +221,6 @@ export default function Battle() {
           cameraActive={cameraActive}
           error={error}
         />
-        {error && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/90">
-            <div className="text-center px-4">
-              <div className="text-4xl mb-4">❌</div>
-              <p className="font-pixel text-xs text-destructive mb-2">Camera Error</p>
-              <p className="font-body text-sm text-muted-foreground mb-4">{error}</p>
-              <Button onClick={handleStart} className="bg-primary text-primary-foreground">Retry</Button>
-            </div>
-          </div>
-        )}
       </>
     );
   }
