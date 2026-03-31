@@ -254,6 +254,16 @@ export default function Battle() {
     saveGameState(state);
   }, [coins, calories, score, streak, totalReps, stopCamera]);
 
+  // Cleanup dodge timer
+  useEffect(() => {
+    return () => { if (dodgeTimerRef.current) clearTimeout(dodgeTimerRef.current); };
+  }, []);
+
+  // Player defeated
+  useEffect(() => {
+    if (playerHP <= 0 && !sessionOver) handleEndSession();
+  }, [playerHP, sessionOver, handleEndSession]);
+
   useEffect(() => { handleStart(); }, [handleStart]);
 
   if (sessionOver) {
