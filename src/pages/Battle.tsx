@@ -323,7 +323,17 @@ export default function Battle() {
         </div>
       </div>
 
-      <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+      {/* Player HP bar */}
+      <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-40 w-[min(82vw,24rem)] px-2">
+        <div className="flex items-center gap-2">
+          <span className="font-pixel text-xs text-foreground game-text-shadow">YOU</span>
+          <div className="flex-1 h-4 border-2 border-foreground bg-black">
+            <div
+              className={`h-full transition-all duration-300 ${playerHpPercent < 30 ? 'bg-destructive' : 'bg-primary'}`}
+              style={{ width: `${playerHpPercent}%` }}
+            />
+          </div>
+        </div>
         <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
       </div>
 
