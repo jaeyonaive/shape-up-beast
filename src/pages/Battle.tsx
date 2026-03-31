@@ -284,6 +284,24 @@ export default function Battle() {
         </div>
       )}
 
+      {/* Gamified bottom message */}
+      <div className="absolute bottom-16 left-4 right-20 z-40">
+        <AnimatePresence>
+          {gameMessage && (
+            <motion.div
+              key={gameMessage}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-center"
+            >
+              <span className="font-pixel text-[10px] text-primary game-text-shadow">{gameMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
       <div className="absolute bottom-4 right-4 z-40 text-right">
         <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
         <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
