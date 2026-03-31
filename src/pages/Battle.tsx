@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { CalibrationScreen } from '@/components/game/CalibrationScreen';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +34,8 @@ export default function Battle() {
   const [isHit, setIsHit] = useState(false);
   const [damageText, setDamageText] = useState<string | null>(null);
   const [comboText, setComboText] = useState<string | null>(null);
+  const [gameMessage, setGameMessage] = useState<string | null>(null);
+  const gameMessageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [started, setStarted] = useState(false);
   const [gameActive, setGameActive] = useState(false);
   const [sessionOver, setSessionOver] = useState(false);
@@ -151,6 +154,19 @@ export default function Battle() {
 
       setIsHit(true);
       setDamageText(`-${damage}`);
+
+      // Gamified bottom message
+      const messages = [
+        `💥 You dealt ${damage} damage!`,
+        `🔥 Squat registered! -${damage} HP`,
+        `⚔️ Critical hit! ${damage} damage!`,
+        `💪 Nice rep! Monster took ${damage}!`,
+      ];
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      if (gameMessageTimer.current) clearTimeout(gameMessageTimer.current);
+      setGameMessage(msg);
+      gameMessageTimer.current = setTimeout(() => setGameMessage(null), 1800);
+
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
     }
   }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
@@ -267,6 +283,24 @@ export default function Battle() {
           <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
         </div>
       )}
+
+      {/* Gamified bottom message */}
+      <div className="absolute bottom-16 left-4 right-20 z-40">
+        <AnimatePresence>
+          {gameMessage && (
+            <motion.div
+              key={gameMessage}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-center"
+            >
+              <span className="font-pixel text-[10px] text-primary game-text-shadow">{gameMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <div className="absolute bottom-4 right-4 z-40 text-right">
         <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
