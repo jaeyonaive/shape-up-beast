@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CameraOverlay } from '@/components/game/CameraOverlay';
 import { MonsterDisplay } from '@/components/game/MonsterDisplay';
 import { HPBar } from '@/components/game/HPBar';
-import { BodySilhouette } from '@/components/game/BodySilhouette';
+import { CalibrationScreen } from '@/components/game/CalibrationScreen';
 import { useNavigate } from 'react-router-dom';
 import { usePoseDetection } from '@/hooks/usePoseDetection';
 import {
-  createExerciseState, detectExercise, DAMAGE_MAP, EXERCISE_LABELS, CALORIES_PER_REP,
-  type ExerciseState, type ExerciseType,
+  createExerciseState, detectExercise, DAMAGE_MAP, CALORIES_PER_REP,
+  type ExerciseState,
 } from '@/lib/exercise-detection';
 import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
@@ -18,18 +17,15 @@ import {
 import { Button } from '@/components/ui/button';
 import battleBgForest from '@/assets/battle-bg-forest.jpg';
 import coinImg from '@/assets/coin.png';
-import monsterTutorial from '@/assets/monster-tutorial.png';
 
 export default function Battle() {
   const navigate = useNavigate();
   const { landmarks, isLoading, error, startCamera, stopCamera, stream } = usePoseDetection();
 
-  // Workout phase management
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [phaseTimeLeft, setPhaseTimeLeft] = useState(WORKOUT_PHASES[0].duration);
   const [workoutComplete, setWorkoutComplete] = useState(false);
 
-  // Game state
   const [score, setScore] = useState(0);
   const [coins, setCoins] = useState(0);
   const [streak, setStreak] = useState(0);
@@ -45,7 +41,6 @@ export default function Battle() {
   const [monsterDefeated, setMonsterDefeated] = useState(false);
   const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
 
-  // Exercise detection state
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
   const [displayState, setDisplayState] = useState<ExerciseState>(exerciseStateRef.current);
   const prevRepRef = useRef(0);
@@ -60,18 +55,13 @@ export default function Battle() {
     const interval = setInterval(() => {
       setPhaseTimeLeft(t => {
         if (t <= 1) {
-          // Phase ended, move to next
           const nextIdx = phaseIndex + 1;
           if (nextIdx >= WORKOUT_PHASES.length) {
             setWorkoutComplete(true);
             return 0;
           }
-          
-          // Show transition overlay
           const nextPhase = WORKOUT_PHASES[nextIdx];
           setPhaseTransition({ label: nextPhase.label, emoji: nextPhase.emoji });
-          
-          // After 3s countdown, start new phase
           setTimeout(() => {
             setPhaseIndex(nextIdx);
             const newExState = createExerciseState(nextPhase.exercise);
@@ -91,7 +81,6 @@ export default function Battle() {
             setDisplayState({ ...newExState });
             setPhaseTransition(null);
           }, 3000);
-          
           return nextPhase.duration;
         }
         return t - 1;
@@ -100,11 +89,8 @@ export default function Battle() {
     return () => clearInterval(interval);
   }, [gameActive, sessionOver, workoutComplete, phaseIndex]);
 
-  // End session when workout complete
   useEffect(() => {
-    if (workoutComplete && !sessionOver) {
-      handleEndSession();
-    }
+    if (workoutComplete && !sessionOver) handleEndSession();
   }, [workoutComplete]);
 
   // Combo timeout
@@ -130,7 +116,6 @@ export default function Battle() {
     if (newState.calibrated && !gameActive) setGameActive(true);
 
     const isActive = gameActive || newState.calibrated;
-    
     if (newState.repCount > prevRepRef.current && isActive) {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
@@ -139,7 +124,6 @@ export default function Battle() {
       const damage = DAMAGE_MAP[exType];
       const calPerRep = CALORIES_PER_REP[exType];
 
-      // Streak
       const newStreak = streakRef.current + 1;
       streakRef.current = newStreak;
       setStreak(newStreak);
@@ -153,25 +137,21 @@ export default function Battle() {
       setCalories(cal => +(cal + calPerRep).toFixed(1));
       setTotalReps(r => r + 1);
 
-      // Monster damage
       setMonsterHP(hp => {
         const newHP = Math.max(0, hp - damage);
         if (newHP <= 0) setMonsterDefeated(true);
         return newHP;
       });
 
-      // Combo label
       const label = getComboLabel(newStreak);
       if (label) setComboText(label);
 
-      // Hit effects
       setIsHit(true);
       setDamageText(`-${damage}`);
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
     }
   }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
 
-  // Respawn monster when defeated
   useEffect(() => {
     if (monsterDefeated) {
       setTimeout(() => {
@@ -198,30 +178,10 @@ export default function Battle() {
     saveGameState(state);
   }, [coins, calories, score, streak, totalReps, stopCamera]);
 
-  // ─── Pre-start screen ───
-  if (!started) {
-    return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4 gap-6">
-        <img src={monsterTutorial} alt="Monster" className="w-48 h-48 object-contain drop-shadow-2xl monster-float" />
-        <div className="text-center">
-          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">2-Phase Workout</h2>
-          <div className="space-y-1 mb-4">
-            {WORKOUT_PHASES.map((p, i) => (
-              <p key={i} className="font-body text-sm text-muted-foreground">
-                {p.emoji} {p.label} — {p.duration}s
-              </p>
-            ))}
-          </div>
-          <p className="font-body text-xs text-muted-foreground mb-6">
-            Defeat the monster · Earn coins · Burn calories
-          </p>
-          <Button onClick={handleStart} disabled={isLoading} className="h-14 px-8 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow">
-            {isLoading ? '⏳ Loading...' : '📷 Start Workout!'}
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // ─── Pre-start: auto-start camera ───
+  useEffect(() => {
+    handleStart();
+  }, []);
 
   // ─── Session over screen ───
   if (sessionOver) {
@@ -246,137 +206,133 @@ export default function Battle() {
     );
   }
 
+  // ─── Calibration phase: full-screen camera ───
+  if (started && !gameActive) {
+    return (
+      <>
+        <CalibrationScreen
+          stream={stream}
+          landmarks={landmarks}
+          feedback={displayState.feedback}
+          calibrationProgress={displayState.calibrationProgress}
+          formQuality={displayState.formQuality}
+          bodyDetected={displayState.bodyDetected}
+          isLoading={isLoading}
+        />
+        {error && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/90">
+            <div className="text-center px-4">
+              <div className="text-4xl mb-4">❌</div>
+              <p className="font-pixel text-xs text-destructive mb-2">Camera Error</p>
+              <p className="font-body text-sm text-muted-foreground mb-4">{error}</p>
+              <Button onClick={handleStart} className="bg-primary text-primary-foreground">Retry</Button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // ─── Gameplay UI (NO camera visible) ───
   return (
-    <div className="h-screen w-screen relative overflow-hidden flex flex-col">
-      {/* Top 60%: Monster + battle scene */}
-      <div className="relative" style={{ flex: '0 0 60%' }}>
-        <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
+    <div className="h-screen w-screen relative overflow-hidden">
+      {/* Full-screen battle background */}
+      <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
 
-        {/* Close button */}
-        <button onClick={handleEndSession} className="absolute top-3 right-3 z-40 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
-          <span className="text-foreground text-lg">✕</span>
-        </button>
-
-        {/* HP Bar - top, full width */}
-        <div className="absolute top-3 left-3 right-14 z-30">
-          <HPBar current={monsterHP} max={MONSTER_MAX_HP} name="Brawler Bunny" />
-        </div>
-
-        {/* Timer - right side */}
-        <div className="absolute top-16 right-3 z-30">
-          <div className="game-panel px-3 py-2 text-center">
-            <span className="font-pixel text-[10px] text-muted-foreground block">TIME</span>
-            <span className="font-pixel text-lg text-foreground game-text-shadow">{phaseTimeLeft}s</span>
-          </div>
-        </div>
-
-        {/* Rep counter - right side, below timer */}
-        <div className="absolute top-[7.5rem] right-3 z-30">
-          <div className="game-panel px-3 py-2 text-center">
-            <span className="font-pixel text-[10px] text-muted-foreground block">REPS</span>
-            <span className="font-pixel text-lg text-primary game-text-shadow">{displayState.repCount}</span>
-          </div>
-        </div>
-
-        {/* Monster - centered in battle area */}
-        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-          <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
-        </div>
-
-        {/* Damage text */}
-        {damageText && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-full z-20 animate-bounce">
-            <span className="font-pixel text-2xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
-          </div>
-        )}
-
-        {/* Combo text */}
-        {comboText && (
-          <div className="absolute top-36 left-1/2 -translate-x-1/2 z-20 animate-bounce">
-            <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
-          </div>
-        )}
-
-        {/* Monster defeated overlay */}
-        {monsterDefeated && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40">
-            <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
-          </div>
-        )}
-
-        {/* Bottom stats bar */}
-        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between z-20">
-          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
-            <span className="text-lg">🔥</span>
-            <span className="font-pixel text-xs text-foreground game-text-shadow">{streak}</span>
-          </div>
-          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
-            <span className="font-pixel text-[10px] text-muted-foreground">{calories} kcal</span>
-          </div>
-          <div className="game-panel px-2 py-1 flex items-center gap-1.5">
-            <img src={coinImg} alt="coins" className="w-5 h-5" />
-            <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
+      {/* HP Bar - pinned to very top, highest z-index */}
+      <div className="absolute top-0 left-0 right-0 z-50 px-2 pt-2">
+        <div className="flex items-center gap-2 game-panel px-3 py-2">
+          <span className="font-pixel text-[10px] text-foreground game-text-shadow whitespace-nowrap">HP</span>
+          <div className="flex-1 h-5 rounded-sm bg-hp-bg border-2 border-border overflow-hidden">
+            <div
+              className={`h-full hp-bar-animate rounded-sm ${
+                (monsterHP / MONSTER_MAX_HP) * 100 < 30 ? 'bg-hp-low' : 'bg-hp-bar'
+              }`}
+              style={{ width: `${Math.max(0, (monsterHP / MONSTER_MAX_HP) * 100)}%` }}
+            />
           </div>
         </div>
       </div>
 
-      {/* Bottom 40%: Camera with AR overlay */}
-      <div className="relative flex-1 bg-black">
-        <CameraOverlay stream={stream} landmarks={landmarks} />
-        
-        {/* Feedback overlay - always on top of camera area */}
-        <div className="absolute bottom-3 left-3 right-3 z-30">
-          {!gameActive && (
-            <div className="p-3 rounded-xl bg-background/90 backdrop-blur-sm border border-border text-center shadow-lg">
-              <p className="font-pixel text-[10px] text-primary mb-1">CALIBRATING</p>
-              <p className="font-body text-xs text-foreground mb-2">{displayState.feedback}</p>
-              <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${displayState.calibrationProgress ?? 0}%` }} />
-              </div>
-            </div>
-          )}
-          {gameActive && (
-            <div className={`p-2 rounded-xl text-center backdrop-blur-sm shadow-lg ${
-              displayState.formQuality === 'good' ? 'bg-green-500/30 border border-green-500/50' :
-              displayState.formQuality === 'needs_work' ? 'bg-yellow-500/30 border border-yellow-500/50' :
-              'bg-background/80 border border-border'
-            }`}>
-              <p className="font-body text-sm font-bold text-foreground game-text-shadow">{displayState.feedback}</p>
-            </div>
-          )}
+      {/* Rep counter - top right, below HP bar */}
+      <div className="absolute top-14 right-3 z-40">
+        <div className="game-panel px-4 py-2 text-center">
+          <span className="font-pixel text-[8px] text-muted-foreground block">REP</span>
+          <span className="font-pixel text-xl text-foreground game-text-shadow">
+            {String(displayState.repCount).padStart(3, '0')}
+          </span>
         </div>
-
-        {/* No camera fallback */}
-        {!stream && !isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <p className="font-body text-sm text-muted-foreground">Waiting for camera...</p>
-          </div>
-        )}
       </div>
+
+      {/* Close button */}
+      <button onClick={handleEndSession} className="absolute top-14 left-3 z-40 w-10 h-10 rounded-full bg-muted/80 flex items-center justify-center">
+        <span className="text-foreground text-lg">✕</span>
+      </button>
+
+      {/* Monster - centered */}
+      <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
+      </div>
+
+      {/* Damage text */}
+      {damageText && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-30 animate-bounce">
+          <span className="font-pixel text-3xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
+        </div>
+      )}
+
+      {/* Combo text */}
+      {comboText && (
+        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 z-30 animate-bounce">
+          <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
+        </div>
+      )}
+
+      {/* Monster defeated overlay */}
+      {monsterDefeated && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40">
+          <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
+        </div>
+      )}
+
+      {/* Timer - bottom right */}
+      <div className="absolute bottom-6 right-3 z-40">
+        <div className="text-right">
+          <span className="font-pixel text-[10px] text-game-gold game-text-shadow block">TIME</span>
+          <span className="font-pixel text-3xl text-game-gold game-text-shadow">{phaseTimeLeft}</span>
+        </div>
+      </div>
+
+      {/* Bottom left stats */}
+      <div className="absolute bottom-6 left-3 z-40 flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <span className="text-lg">🔥</span>
+          <span className="font-pixel text-xs text-foreground game-text-shadow">{streak}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <img src={coinImg} alt="coins" className="w-5 h-5" />
+          <span className="font-pixel text-xs text-game-gold game-text-shadow">{coins}G</span>
+        </div>
+      </div>
+
+      {/* Feedback text - bottom center */}
+      {gameActive && displayState.feedback && (
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40">
+          <div className={`game-panel px-4 py-2 ${
+            displayState.formQuality === 'good' ? 'border-green-500' :
+            displayState.formQuality === 'needs_work' ? 'border-yellow-500' :
+            ''
+          }`}>
+            <p className="font-body text-sm font-bold text-foreground text-center game-text-shadow">
+              {displayState.feedback}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Phase transition overlay */}
       {phaseTransition && (
         <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
-      )}
-
-      {/* Loading overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/80">
-          <div className="text-center">
-            <div className="text-4xl mb-4 animate-spin">⏳</div>
-            <p className="font-pixel text-xs text-foreground">Starting camera…</p>
-          </div>
-        </div>
-      )}
-      {error && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/90">
-          <div className="text-center px-4">
-            <div className="text-4xl mb-4">❌</div>
-            <p className="font-pixel text-xs text-destructive mb-2">Camera Error</p>
-            <p className="font-body text-sm text-muted-foreground mb-4">{error}</p>
-            <Button onClick={handleStart} className="bg-primary text-primary-foreground">Retry</Button>
-          </div>
-        </div>
       )}
     </div>
   );

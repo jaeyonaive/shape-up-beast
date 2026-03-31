@@ -1,69 +1,66 @@
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { loadGameState } from '@/lib/game-data';
-import monsterTutorial from '@/assets/monster-tutorial.png';
-import coinImg from '@/assets/coin.png';
-import battleBg from '@/assets/battle-bg.jpg';
+import { useState } from 'react';
+import titleBg from '@/assets/title-screen-bg.png';
 
 export default function Home() {
   const navigate = useNavigate();
-  const gameState = loadGameState();
+  const [pressing, setPressing] = useState<string | null>(null);
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden">
-      <div className="absolute inset-0 z-0">
-        <img src={battleBg} alt="" className="w-full h-full object-cover" />
-        <div className="absolute inset-0" style={{ background: 'hsl(var(--game-overlay))' }} />
-      </div>
+    <div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center">
+      {/* Full-screen background from user's design */}
+      <img
+        src={titleBg}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover"
+      />
 
-      <div className="relative z-10 flex-1 flex flex-col items-center px-4 pt-12 pb-8">
-        <h1 className="font-pixel text-2xl text-primary game-text-shadow mb-2 text-center">Fitnasia</h1>
-        <p className="font-pixel text-[10px] text-foreground game-text-shadow mb-8 text-center">
-          Squat Your Way to Glory!
-        </p>
+      {/* Overlay to darken slightly for button readability */}
+      <div className="absolute inset-0 bg-black/20" />
 
-        <div className="relative mb-8">
-          <img src={monsterTutorial} alt="Brawler Bunny" className="w-40 h-40 object-contain monster-float drop-shadow-2xl" />
-        </div>
-
-        <div className="game-panel px-6 py-4 mb-8 w-full max-w-xs">
-          <div className="flex justify-between items-center mb-3">
-            <span className="font-body text-sm text-muted-foreground">High Score</span>
-            <span className="font-pixel text-xs text-primary">{gameState.highScore}</span>
-          </div>
-          <div className="flex justify-between items-center mb-3">
-            <span className="font-body text-sm text-muted-foreground">Total Coins</span>
-            <div className="flex items-center gap-1">
-              <img src={coinImg} alt="coins" className="w-5 h-5" />
-              <span className="font-pixel text-xs text-game-gold">{gameState.totalCoins}G</span>
-            </div>
-          </div>
-          <div className="flex justify-between items-center mb-3">
-            <span className="font-body text-sm text-muted-foreground">Total Reps</span>
-            <span className="font-pixel text-xs text-foreground">{gameState.totalReps}</span>
-          </div>
-          <div className="flex justify-between items-center mb-3">
-            <span className="font-body text-sm text-muted-foreground">Best Streak</span>
-            <span className="font-pixel text-xs text-secondary">{gameState.bestStreak}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="font-body text-sm text-muted-foreground">Calories Burned</span>
-            <span className="font-pixel text-xs text-game-gold">{gameState.totalCalories} kcal</span>
-          </div>
-        </div>
-
-        <Button
+      {/* Buttons positioned in center-lower area */}
+      <div className="relative z-10 flex flex-col items-center gap-4 mt-[55%]">
+        {/* Start Game button - styled like the red "PLAY" button in the design */}
+        <button
           onClick={() => navigate('/battle/0')}
-          className="w-full max-w-xs h-14 font-pixel text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 pulse-glow"
+          onPointerDown={() => setPressing('start')}
+          onPointerUp={() => setPressing(null)}
+          onPointerLeave={() => setPressing(null)}
+          className={`
+            px-10 py-4 rounded-full font-pixel text-sm text-foreground
+            bg-gradient-to-b from-destructive to-destructive/80
+            border-4 border-destructive/60
+            shadow-lg shadow-destructive/40
+            transition-all duration-150
+            hover:scale-105 hover:shadow-xl hover:shadow-destructive/50
+            active:scale-95
+            ${pressing === 'start' ? 'scale-95 brightness-90' : ''}
+          `}
+          style={{
+            textShadow: '2px 2px 0px rgba(0,0,0,0.5)',
+          }}
         >
-          🏋️ Start 3-Phase Workout
-        </Button>
+          START GAME
+        </button>
 
-        <div className="mt-auto pt-8">
-          <p className="font-body text-xs text-muted-foreground text-center">
-            Build combos for bonus points!<br />
-            Camera tracks your body movements.
-          </p>
+        {/* Secondary buttons */}
+        <div className="flex gap-3">
+          <button
+            onClick={() => navigate('/tutorial')}
+            onPointerDown={() => setPressing('how')}
+            onPointerUp={() => setPressing(null)}
+            onPointerLeave={() => setPressing(null)}
+            className={`
+              px-5 py-2.5 rounded-lg font-pixel text-[8px] text-foreground
+              bg-muted/80 backdrop-blur-sm border-2 border-border
+              transition-all duration-150
+              hover:scale-105 hover:bg-muted
+              active:scale-95
+              ${pressing === 'how' ? 'scale-95' : ''}
+            `}
+          >
+            HOW TO PLAY
+          </button>
         </div>
       </div>
     </div>
