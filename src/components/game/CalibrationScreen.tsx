@@ -42,19 +42,18 @@ export function CalibrationScreen({
     }
 
     let cancelled = false;
+
     const attachStream = async () => {
       try {
         video.srcObject = stream;
         await video.play();
         if (!cancelled) {
-          setVideoReady(true);
+          setVideoReady(video.readyState >= 2);
           console.log('[Fitnasia] Calibration preview active:', video.videoWidth, 'x', video.videoHeight);
         }
       } catch (attachError) {
         console.error('[Fitnasia] Calibration preview failed:', attachError);
-        if (!cancelled) {
-          setVideoReady(false);
-        }
+        if (!cancelled) setVideoReady(false);
       }
     };
 
@@ -71,24 +70,24 @@ export function CalibrationScreen({
     const video = videoRef.current;
     if (!video) return;
 
-    const updateRect = () => {
+    const updateMetrics = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       setIsLandscape(video.videoWidth > video.videoHeight);
       setViewport({ width: window.innerWidth, height: window.innerHeight });
       setVideoReady(video.readyState >= 2);
     };
 
-    video.addEventListener('loadedmetadata', updateRect);
-    video.addEventListener('canplay', updateRect);
-    video.addEventListener('resize', updateRect);
-    window.addEventListener('resize', updateRect);
-    const interval = setInterval(updateRect, 500);
+    video.addEventListener('loadedmetadata', updateMetrics);
+    video.addEventListener('canplay', updateMetrics);
+    video.addEventListener('resize', updateMetrics);
+    window.addEventListener('resize', updateMetrics);
+    const interval = setInterval(updateMetrics, 300);
 
     return () => {
-      video.removeEventListener('loadedmetadata', updateRect);
-      video.removeEventListener('canplay', updateRect);
-      video.removeEventListener('resize', updateRect);
-      window.removeEventListener('resize', updateRect);
+      video.removeEventListener('loadedmetadata', updateMetrics);
+      video.removeEventListener('canplay', updateMetrics);
+      video.removeEventListener('resize', updateMetrics);
+      window.removeEventListener('resize', updateMetrics);
       clearInterval(interval);
     };
   }, [stream]);
@@ -96,63 +95,72 @@ export function CalibrationScreen({
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video) return;
+    if (!canvas || !video || !video.videoWidth || !video.videoHeight) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (!landmarks || !video.videoWidth || !video.videoHeight) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    drawPose(ctx, landmarks, canvas.width, canvas.height);
+    if (landmarks) {
+      drawPose(ctx, landmarks, canvas.width, canvas.height);
+    }
   }, [landmarks, videoReady]);
 
-  const renderWidth = isLandscape ? `${viewport.height}px` : '100vw';
-  const renderHeight = isLandscape ? `${viewport.width}px` : '100vh';
+  const mediaWidth = isLandscape ? `${viewport.height}px` : '100vw';
+  const mediaHeight = isLandscape ? `${viewport.width}px` : '100vh';
 
-  const sharedCameraStyle: CSSProperties = {
-    position: 'fixed',
-    top: '50%',
-    left: '50%',
-    width: renderWidth,
-    height: renderHeight,
+  const sharedMediaStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    margin: 'auto',
+    width: mediaWidth,
+    height: mediaHeight,
     objectFit: 'contain',
-    transform: isLandscape
-      ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
-      : 'translate(-50%, -50%) scaleX(-1)',
+    objectPosition: 'center center',
+    transform: isLandscape ? 'rotate(90deg) scaleX(-1)' : 'scaleX(-1)',
     transformOrigin: 'center center',
+    maxWidth: 'none',
+    maxHeight: 'none',
   };
 
   const cameraMessage = error
     ? 'Camera failed to start'
-    : cameraStatus === 'requesting-permission'
-      ? 'Requesting camera permission…'
-      : cameraStatus === 'starting-camera'
-        ? 'Camera starting…'
-        : cameraActive && videoReady
-          ? 'Camera active'
-          : isLoading
-            ? 'Camera starting…'
-            : 'Requesting camera permission…';
+    : cameraActive && videoReady
+      ? 'Camera active'
+      : cameraStatus === 'requesting-permission'
+        ? 'Requesting camera permission…'
+        : 'Camera starting…';
 
-  const showLoadingOverlay = !error && !videoReady && (cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera' || !stream);
+  const bodyMessage = bodyDetected ? 'Body detected' : 'Body not detected';
+  const showLoadingOverlay = !error && !videoReady && (cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera' || isLoading || !stream);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 50, background: '#000' }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        zIndex: 50,
+        overflow: 'hidden',
+        background: 'hsl(0 0% 0%)',
+      }}
+    >
       <video
         ref={videoRef}
         autoPlay
         playsInline
         muted
-        style={sharedCameraStyle}
+        style={sharedMediaStyle}
       />
       <canvas
         ref={canvasRef}
         style={{
-          ...sharedCameraStyle,
+          ...sharedMediaStyle,
           pointerEvents: 'none',
           background: 'transparent',
         }}
@@ -164,7 +172,7 @@ export function CalibrationScreen({
             {cameraMessage}
           </p>
           <p className="font-pixel text-[10px] text-primary mb-1.5 tracking-widest">
-            {bodyDetected ? 'BODY DETECTED' : 'CALIBRATING'}
+            {bodyMessage.toUpperCase()}
           </p>
           <p className="font-body text-sm text-foreground">{feedback}</p>
           <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mt-2">
