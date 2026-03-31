@@ -33,6 +33,7 @@ export default function Battle() {
   const [calories, setCalories] = useState(0);
   const [totalReps, setTotalReps] = useState(0);
   const [monsterHP, setMonsterHP] = useState(MONSTER_MAX_HP);
+  const [playerHP, setPlayerHP] = useState(PLAYER_MAX_HP);
   const [isHit, setIsHit] = useState(false);
   const [damageText, setDamageText] = useState<string | null>(null);
   const [comboText, setComboText] = useState<string | null>(null);
@@ -43,6 +44,13 @@ export default function Battle() {
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
   const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
+
+  // Dodge mechanic state
+  const [dodgePhase, setDodgePhase] = useState<'idle' | 'warning' | 'result'>('idle');
+  const repsSinceLastAttack = useRef(0);
+  const dodgeBaseHipX = useRef<number | null>(null);
+  const dodgeSuccess = useRef(false);
+  const dodgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
   const [displayState, setDisplayState] = useState<ExerciseState>(exerciseStateRef.current);
