@@ -153,6 +153,19 @@ export default function Battle() {
 
       setIsHit(true);
       setDamageText(`-${damage}`);
+
+      // Gamified bottom message
+      const messages = [
+        `💥 You dealt ${damage} damage!`,
+        `🔥 Squat registered! -${damage} HP`,
+        `⚔️ Critical hit! ${damage} damage!`,
+        `💪 Nice rep! Monster took ${damage}!`,
+      ];
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      if (gameMessageTimer.current) clearTimeout(gameMessageTimer.current);
+      setGameMessage(msg);
+      gameMessageTimer.current = setTimeout(() => setGameMessage(null), 1800);
+
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
     }
   }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
