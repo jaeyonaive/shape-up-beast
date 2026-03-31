@@ -10,9 +10,7 @@ import {
 } from '@/lib/exercise-detection';
 import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
-  WORKOUT_PHASES, MONSTER_MAX_HP, PLAYER_MAX_HP, MONSTER_ATTACK_DAMAGE,
-  DODGE_WINDOW_MS, DODGE_THRESHOLD, ATTACK_EVERY_N_REPS,
-  loadGameState, saveGameState,
+  WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
   getComboMultiplier, getComboLabel,
 } from '@/lib/game-data';
@@ -33,7 +31,6 @@ export default function Battle() {
   const [calories, setCalories] = useState(0);
   const [totalReps, setTotalReps] = useState(0);
   const [monsterHP, setMonsterHP] = useState(MONSTER_MAX_HP);
-  const [playerHP, setPlayerHP] = useState(PLAYER_MAX_HP);
   const [isHit, setIsHit] = useState(false);
   const [damageText, setDamageText] = useState<string | null>(null);
   const [comboText, setComboText] = useState<string | null>(null);
@@ -44,13 +41,6 @@ export default function Battle() {
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
   const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
-
-  // Dodge mechanic state
-  const [dodgePhase, setDodgePhase] = useState<'idle' | 'warning' | 'result'>('idle');
-  const repsSinceLastAttack = useRef(0);
-  const dodgeBaseHipX = useRef<number | null>(null);
-  const dodgeSuccess = useRef(false);
-  const dodgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
   const [displayState, setDisplayState] = useState<ExerciseState>(exerciseStateRef.current);
@@ -126,49 +116,6 @@ export default function Battle() {
     setComboText(prev => (prev === 'No body detected' || prev === 'Tracking active' ? null : prev));
   }, [displayState.feedback, gameActive, sessionOver]);
 
-  // Trigger monster attack (dodge phase)
-  const triggerMonsterAttack = useCallback(() => {
-    if (dodgePhase !== 'idle') return;
-    setDodgePhase('warning');
-    dodgeSuccess.current = false;
-    dodgeBaseHipX.current = null; // will be set on next landmark frame
-
-    if (gameMessageTimer.current) clearTimeout(gameMessageTimer.current);
-    setGameMessage('⚠️ Monster attacks! Move left or right to dodge!');
-
-    dodgeTimerRef.current = setTimeout(() => {
-      setDodgePhase('result');
-      if (dodgeSuccess.current) {
-        setGameMessage('✅ Dodge successful!');
-      } else {
-        setPlayerHP(hp => Math.max(0, hp - MONSTER_ATTACK_DAMAGE));
-        setGameMessage(`💔 Ouch! You took ${MONSTER_ATTACK_DAMAGE} damage!`);
-      }
-      gameMessageTimer.current = setTimeout(() => {
-        setGameMessage(null);
-        setDodgePhase('idle');
-      }, 1500);
-    }, DODGE_WINDOW_MS);
-  }, [dodgePhase]);
-
-  // Detect dodge movement during warning phase
-  useEffect(() => {
-    if (dodgePhase !== 'warning' || !landmarks) return;
-    const leftHip = landmarks[23];
-    const rightHip = landmarks[24];
-    if (!leftHip || !rightHip || leftHip.visibility < 0.5 || rightHip.visibility < 0.5) return;
-
-    const hipX = (leftHip.x + rightHip.x) / 2;
-    if (dodgeBaseHipX.current === null) {
-      dodgeBaseHipX.current = hipX;
-      return;
-    }
-    const delta = Math.abs(hipX - dodgeBaseHipX.current);
-    if (delta >= DODGE_THRESHOLD) {
-      dodgeSuccess.current = true;
-    }
-  }, [landmarks, dodgePhase]);
-
   useEffect(() => {
     if (!landmarks || !started || sessionOver || workoutComplete) return;
     const newState = detectExercise(landmarks, exerciseStateRef.current);
@@ -178,7 +125,7 @@ export default function Battle() {
     if (newState.calibrated && !gameActive) setGameActive(true);
 
     const isActive = gameActive || newState.calibrated;
-    if (newState.repCount > prevRepRef.current && isActive && dodgePhase === 'idle') {
+    if (newState.repCount > prevRepRef.current && isActive) {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
 
@@ -208,9 +155,10 @@ export default function Battle() {
       setIsHit(true);
       setDamageText(`-${damage}`);
 
+      // Gamified bottom message
       const messages = [
         `💥 You dealt ${damage} damage!`,
-        `🔥 Rep registered! -${damage} HP`,
+        `🔥 Squat registered! -${damage} HP`,
         `⚔️ Critical hit! ${damage} damage!`,
         `💪 Nice rep! Monster took ${damage}!`,
       ];
@@ -220,16 +168,8 @@ export default function Battle() {
       gameMessageTimer.current = setTimeout(() => setGameMessage(null), 1800);
 
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
-
-      // Check if monster should attack
-      repsSinceLastAttack.current += 1;
-      if (repsSinceLastAttack.current >= ATTACK_EVERY_N_REPS) {
-        repsSinceLastAttack.current = 0;
-        // Delay attack slightly so player sees their damage first
-        setTimeout(() => triggerMonsterAttack(), 1200);
-      }
     }
-  }, [landmarks, started, sessionOver, gameActive, workoutComplete, dodgePhase, triggerMonsterAttack]);
+  }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
 
   useEffect(() => {
     if (monsterDefeated) {
@@ -253,16 +193,6 @@ export default function Battle() {
     if (streak > state.bestStreak) state.bestStreak = streak;
     saveGameState(state);
   }, [coins, calories, score, streak, totalReps, stopCamera]);
-
-  // Cleanup dodge timer
-  useEffect(() => {
-    return () => { if (dodgeTimerRef.current) clearTimeout(dodgeTimerRef.current); };
-  }, []);
-
-  // Player defeated
-  useEffect(() => {
-    if (playerHP <= 0 && !sessionOver) handleEndSession();
-  }, [playerHP, sessionOver, handleEndSession]);
 
   useEffect(() => { handleStart(); }, [handleStart]);
 
@@ -309,7 +239,6 @@ export default function Battle() {
   }
 
   const hpPercent = Math.max(0, (monsterHP / MONSTER_MAX_HP) * 100);
-  const playerHpPercent = Math.max(0, (playerHP / PLAYER_MAX_HP) * 100);
 
   return (
     <div className="h-screen w-screen relative overflow-hidden">
@@ -333,17 +262,7 @@ export default function Battle() {
         </div>
       </div>
 
-      {/* Player HP bar */}
-      <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-40 w-[min(82vw,24rem)] px-2">
-        <div className="flex items-center gap-2">
-          <span className="font-pixel text-xs text-foreground game-text-shadow">YOU</span>
-          <div className="flex-1 h-4 border-2 border-foreground bg-black">
-            <div
-              className={`h-full transition-all duration-300 ${playerHpPercent < 30 ? 'bg-destructive' : 'bg-primary'}`}
-              style={{ width: `${playerHpPercent}%` }}
-            />
-          </div>
-        </div>
+      <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
         <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
       </div>
 
@@ -387,19 +306,6 @@ export default function Battle() {
         <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
         <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
       </div>
-
-      {/* Dodge warning flash */}
-      <AnimatePresence>
-        {dodgePhase === 'warning' && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: [0.1, 0.3, 0.1] }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.6, repeat: Infinity }}
-            className="absolute inset-0 z-35 bg-destructive/20 pointer-events-none"
-          />
-        )}
-      </AnimatePresence>
 
       {phaseTransition && (
         <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
