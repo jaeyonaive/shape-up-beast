@@ -9,6 +9,8 @@ interface CalibrationScreenProps {
   formQuality: 'good' | 'needs_work' | 'neutral';
   bodyDetected: boolean;
   isLoading: boolean;
+  cameraActive?: boolean;
+  error?: string | null;
 }
 
 export function CalibrationScreen({
@@ -18,18 +20,50 @@ export function CalibrationScreen({
   calibrationProgress,
   bodyDetected,
   isLoading,
+  cameraActive,
+  error,
 }: CalibrationScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isLandscape, setIsLandscape] = useState(false);
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const [videoReady, setVideoReady] = useState(false);
+
+  // Debug status
+  const debugStatus = error
+    ? `Camera failed: ${error}`
+    : isLoading
+    ? 'Camera starting…'
+    : !stream
+    ? 'Requesting camera permission…'
+    : !videoReady
+    ? 'Attaching camera stream…'
+    : cameraActive
+    ? 'Camera active'
+    : 'Camera starting…';
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !stream) return;
+    if (!video || !stream) {
+      setVideoReady(false);
+      return;
+    }
+    // Always re-attach stream
     video.srcObject = stream;
-    video.play().catch(() => {});
-    return () => { video.srcObject = null; };
+    video.play().then(() => {
+      setVideoReady(true);
+      console.log('[Fitnasia] CalibrationScreen video playing:', video.videoWidth, 'x', video.videoHeight);
+    }).catch((e) => {
+      console.error('[Fitnasia] CalibrationScreen video play failed:', e);
+      // Retry after a short delay
+      setTimeout(() => {
+        video.play().then(() => setVideoReady(true)).catch(() => {});
+      }, 500);
+    });
+    return () => {
+      video.srcObject = null;
+      setVideoReady(false);
+    };
   }, [stream]);
 
   useEffect(() => {
@@ -38,7 +72,6 @@ export function CalibrationScreen({
 
     const updateRect = () => {
       if (!video.videoWidth || !video.videoHeight) return;
-
       setIsLandscape(video.videoWidth > video.videoHeight);
       setViewport({ width: window.innerWidth, height: window.innerHeight });
     };
@@ -101,9 +134,13 @@ export function CalibrationScreen({
         }}
       />
 
-      {/* Minimal overlay */}
+      {/* Debug status + calibration overlay */}
       <div style={{ position: 'fixed', bottom: 32, left: 16, right: 16, zIndex: 10 }}>
         <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
+          {/* Debug camera status */}
+          <p className="font-pixel text-[8px] text-muted-foreground mb-1 tracking-wider opacity-70">
+            {debugStatus}
+          </p>
           <p className="font-pixel text-[10px] text-primary mb-1.5 tracking-widest">
             {bodyDetected ? 'BODY DETECTED' : 'CALIBRATING'}
           </p>
@@ -118,11 +155,24 @@ export function CalibrationScreen({
       </div>
 
       {/* Loading state */}
-      {isLoading && (
+      {(isLoading || !stream) && !error && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/60">
           <div className="text-center">
             <div className="text-4xl mb-4 animate-spin">⏳</div>
-            <p className="font-pixel text-xs text-foreground">Starting camera…</p>
+            <p className="font-pixel text-xs text-foreground">
+              {!stream ? 'Requesting camera…' : 'Starting camera…'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error state */}
+      {error && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/80">
+          <div className="text-center px-4">
+            <div className="text-4xl mb-4">❌</div>
+            <p className="font-pixel text-xs text-destructive mb-2">Camera Failed</p>
+            <p className="font-body text-sm text-muted-foreground">{error}</p>
           </div>
         </div>
       )}
