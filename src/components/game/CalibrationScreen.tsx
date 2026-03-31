@@ -30,7 +30,6 @@ export function CalibrationScreen({
 }: CalibrationScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [needsRotation, setNeedsRotation] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
 
   useEffect(() => {
@@ -68,21 +67,19 @@ export function CalibrationScreen({
     const video = videoRef.current;
     if (!video) return;
 
-    const updateOrientation = () => {
-      if (!video.videoWidth || !video.videoHeight) return;
-      setNeedsRotation(video.videoWidth > video.videoHeight);
-      setVideoReady(video.readyState >= 2);
+    const updateReadyState = () => {
+      setVideoReady(video.readyState >= 2 && !!video.videoWidth && !!video.videoHeight);
     };
 
-    video.addEventListener('loadedmetadata', updateOrientation);
-    video.addEventListener('canplay', updateOrientation);
-    video.addEventListener('resize', updateOrientation);
-    const interval = setInterval(updateOrientation, 300);
+    video.addEventListener('loadedmetadata', updateReadyState);
+    video.addEventListener('canplay', updateReadyState);
+    video.addEventListener('resize', updateReadyState);
+    const interval = setInterval(updateReadyState, 300);
 
     return () => {
-      video.removeEventListener('loadedmetadata', updateOrientation);
-      video.removeEventListener('canplay', updateOrientation);
-      video.removeEventListener('resize', updateOrientation);
+      video.removeEventListener('loadedmetadata', updateReadyState);
+      video.removeEventListener('canplay', updateReadyState);
+      video.removeEventListener('resize', updateReadyState);
       clearInterval(interval);
     };
   }, [stream]);
@@ -104,19 +101,15 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoReady]);
 
-  const mediaTransform = needsRotation ? 'rotate(90deg) scaleX(-1)' : 'scaleX(-1)';
-  const mediaWidth = needsRotation ? '100vh' : '100vw';
-  const mediaHeight = needsRotation ? '100vw' : '100vh';
-
   const mediaStyle = {
     position: 'absolute' as const,
-    top: '50%',
-    left: '50%',
-    width: mediaWidth,
-    height: mediaHeight,
+    top: 0,
+    left: 0,
+    width: '100vw',
+    height: '100vh',
     objectFit: 'contain' as const,
     objectPosition: 'center center' as const,
-    transform: `translate(-50%, -50%) ${mediaTransform}`,
+    transform: 'scaleX(-1)',
     transformOrigin: 'center center' as const,
     background: 'transparent',
   };
