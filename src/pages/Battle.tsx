@@ -378,6 +378,19 @@ export default function Battle() {
         <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
       </div>
 
+      {/* Dodge warning flash */}
+      <AnimatePresence>
+        {dodgePhase === 'warning' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0.1, 0.3, 0.1] }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, repeat: Infinity }}
+            className="absolute inset-0 z-35 bg-destructive/20 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
       {phaseTransition && (
         <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
       )}
