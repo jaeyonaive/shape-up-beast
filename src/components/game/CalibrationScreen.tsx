@@ -1,5 +1,5 @@
-import { type CSSProperties, type Landmark, drawPose } from '@/lib/pose-detection';
-import { useRef, useEffect, useState } from 'react';
+import { type Landmark, drawPose } from '@/lib/pose-detection';
+import { useRef, useEffect, useState, type CSSProperties } from 'react';
 
 interface CalibrationScreenProps {
   stream: MediaStream | null;
