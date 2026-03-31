@@ -22,6 +22,7 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [isLandscape, setIsLandscape] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -36,13 +37,33 @@ export function CalibrationScreen({
     if (!video) return;
     const updateRect = () => {
       if (!video.videoWidth || !video.videoHeight) return;
-      const cW = video.clientWidth;
-      const cH = video.clientHeight;
-      const vA = video.videoWidth / video.videoHeight;
-      const cA = cW / cH;
+
+      // Detect if camera feed is landscape (wider than tall)
+      const feedIsLandscape = video.videoWidth > video.videoHeight;
+      setIsLandscape(feedIsLandscape);
+
+      // If landscape feed, we rotate it 90deg so it appears portrait.
+      // The effective dimensions after rotation swap.
+      const effectiveW = feedIsLandscape ? video.videoHeight : video.videoWidth;
+      const effectiveH = feedIsLandscape ? video.videoWidth : video.videoHeight;
+
+      const screenW = window.innerWidth;
+      const screenH = window.innerHeight;
+      const feedAspect = effectiveW / effectiveH;
+      const screenAspect = screenW / screenH;
+
       let rW: number, rH: number, oX: number, oY: number;
-      if (vA > cA) { rW = cW; rH = cW / vA; oX = 0; oY = (cH - rH) / 2; }
-      else { rH = cH; rW = cH * vA; oX = (cW - rW) / 2; oY = 0; }
+      if (feedAspect > screenAspect) {
+        rW = screenW;
+        rH = screenW / feedAspect;
+        oX = 0;
+        oY = (screenH - rH) / 2;
+      } else {
+        rH = screenH;
+        rW = screenH * feedAspect;
+        oX = (screenW - rW) / 2;
+        oY = 0;
+      }
       setVideoRect({ top: oY, left: oX, width: rW, height: rH });
     };
     video.addEventListener('loadedmetadata', updateRect);
@@ -66,29 +87,48 @@ export function CalibrationScreen({
     drawPose(ctx, landmarks, canvas.width, canvas.height);
   }, [landmarks]);
 
+  // Build transform: mirror + optional 90deg rotation for landscape feeds
+  const videoTransform = isLandscape
+    ? 'scaleX(-1) rotate(90deg)'
+    : 'scaleX(-1)';
+  const canvasTransform = isLandscape
+    ? 'scaleX(-1) rotate(90deg)'
+    : 'scaleX(-1)';
+
   return (
-    <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
-      {/* Full-screen camera — object-contain, NO zoom, NO crop, letterboxing allowed */}
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 50, background: '#000' }}>
+      {/* Full-screen camera: position fixed, object-contain, no container */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-contain"
-        autoPlay playsInline muted
-        style={{ transform: 'scaleX(-1)' }}
+        autoPlay
+        playsInline
+        muted
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          objectFit: 'contain',
+          background: '#000',
+          transform: videoTransform,
+        }}
       />
       <canvas
         ref={canvasRef}
-        className="absolute pointer-events-none"
         style={{
+          position: 'fixed',
+          pointerEvents: 'none',
           top: videoRect?.top ?? 0,
           left: videoRect?.left ?? 0,
-          width: videoRect?.width ?? '100%',
-          height: videoRect?.height ?? '100%',
-          transform: 'scaleX(-1)',
+          width: videoRect?.width ?? '100vw',
+          height: videoRect?.height ?? '100vh',
+          transform: canvasTransform,
         }}
       />
 
-      {/* Minimal overlay — matching existing game UI style */}
-      <div className="absolute bottom-8 left-4 right-4 z-10">
+      {/* Minimal overlay */}
+      <div style={{ position: 'fixed', bottom: 32, left: 16, right: 16, zIndex: 10 }}>
         <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
           <p className="font-pixel text-[10px] text-primary mb-1.5 tracking-widest">
             {bodyDetected ? 'BODY DETECTED' : 'CALIBRATING'}
@@ -105,7 +145,7 @@ export function CalibrationScreen({
 
       {/* Loading state */}
       {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-20">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/60">
           <div className="text-center">
             <div className="text-4xl mb-4 animate-spin">⏳</div>
             <p className="font-pixel text-xs text-foreground">Starting camera…</p>
