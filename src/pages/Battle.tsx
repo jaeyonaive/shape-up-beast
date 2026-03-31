@@ -18,7 +18,7 @@ import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
 
 export default function Battle() {
   const navigate = useNavigate();
-  const { landmarks, isLoading, error, cameraActive, startCamera, stopCamera, stream } = usePoseDetection();
+  const { landmarks, isLoading, error, cameraActive, cameraStatus, startCamera, stopCamera, stream } = usePoseDetection();
 
   const [phaseIndex, setPhaseIndex] = useState(0);
   const [phaseTimeLeft, setPhaseTimeLeft] = useState(WORKOUT_PHASES[0].duration);
@@ -45,7 +45,6 @@ export default function Battle() {
   const lastRepTimeRef = useRef(Date.now());
   const streakRef = useRef(0);
 
-  // Phase countdown timer
   useEffect(() => {
     if (!gameActive || sessionOver || workoutComplete) return;
     const interval = setInterval(() => {
@@ -114,7 +113,6 @@ export default function Battle() {
     setComboText(prev => (prev === 'No body detected' || prev === 'Tracking active' ? null : prev));
   }, [displayState.feedback, gameActive, sessionOver]);
 
-  // Exercise detection
   useEffect(() => {
     if (!landmarks || !started || sessionOver || workoutComplete) return;
     const newState = detectExercise(landmarks, exerciseStateRef.current);
@@ -180,10 +178,8 @@ export default function Battle() {
     saveGameState(state);
   }, [coins, calories, score, streak, totalReps, stopCamera]);
 
-  // Auto-start camera on mount
-  useEffect(() => { handleStart(); }, []);
+  useEffect(() => { handleStart(); }, [handleStart]);
 
-  // ─── Session over ───
   if (sessionOver) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
@@ -206,7 +202,6 @@ export default function Battle() {
     );
   }
 
-  // ─── Calibration: full-screen camera ───
   if (started && !gameActive) {
     return (
       <>
@@ -219,24 +214,28 @@ export default function Battle() {
           bodyDetected={displayState.bodyDetected}
           isLoading={isLoading}
           cameraActive={cameraActive}
+          cameraStatus={cameraStatus}
           error={error}
+          onRetry={handleStart}
         />
       </>
     );
   }
 
-  // ─── Gameplay: exact user reference layout, NO camera ───
   const hpPercent = Math.max(0, (monsterHP / MONSTER_MAX_HP) * 100);
 
   return (
     <div className="h-screen w-screen relative overflow-hidden">
-      {/* Background */}
       <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
 
-      {/* ── TOP BAR: HP left, REP:000 right ── */}
-      <div className="absolute top-3 left-3 right-3 z-50 flex items-start justify-between">
-        {/* HP bar — matches reference exactly */}
-        <div className="flex items-center gap-2 flex-1 mr-4">
+      <div className="absolute top-3 left-3 z-50">
+        <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
+          REP:{String(displayState.repCount).padStart(3, '0')}
+        </span>
+      </div>
+
+      <div className="absolute top-[11vh] left-1/2 -translate-x-1/2 z-40 w-[min(82vw,24rem)] px-2">
+        <div className="flex items-center gap-2">
           <span className="font-pixel text-xs text-foreground game-text-shadow">HP</span>
           <div className="flex-1 h-6 border-[3px] border-foreground bg-black">
             <div
@@ -245,45 +244,35 @@ export default function Battle() {
             />
           </div>
         </div>
-        {/* Rep counter — REP:000 style from reference */}
-        <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
-          REP:{String(displayState.repCount).padStart(3, '0')}
-        </span>
       </div>
 
-      {/* ── MONSTER: centered ── */}
       <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
         <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
       </div>
 
-      {/* Damage text */}
       {damageText && (
         <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-30 animate-bounce">
           <span className="font-pixel text-3xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
         </div>
       )}
 
-      {/* Combo text */}
       {comboText && (
         <div className="absolute top-[40%] left-1/2 -translate-x-1/2 z-30 animate-bounce">
           <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
         </div>
       )}
 
-      {/* Monster defeated */}
       {monsterDefeated && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40">
           <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
         </div>
       )}
 
-      {/* ── TIMER: bottom-right, large gold text matching reference ── */}
       <div className="absolute bottom-4 right-4 z-40 text-right">
         <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
         <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
       </div>
 
-      {/* Phase transition overlay */}
       {phaseTransition && (
         <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
       )}

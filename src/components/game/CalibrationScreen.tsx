@@ -1,5 +1,6 @@
-import { type Landmark, drawPose } from '@/lib/pose-detection';
 import { useRef, useEffect, useState, type CSSProperties } from 'react';
+import { Button } from '@/components/ui/button';
+import { type Landmark, drawPose } from '@/lib/pose-detection';
 
 interface CalibrationScreenProps {
   stream: MediaStream | null;
@@ -10,7 +11,9 @@ interface CalibrationScreenProps {
   bodyDetected: boolean;
   isLoading: boolean;
   cameraActive?: boolean;
+  cameraStatus?: 'idle' | 'requesting-permission' | 'starting-camera' | 'camera-active' | 'camera-failed';
   error?: string | null;
+  onRetry?: () => void;
 }
 
 export function CalibrationScreen({
@@ -21,7 +24,9 @@ export function CalibrationScreen({
   bodyDetected,
   isLoading,
   cameraActive,
+  cameraStatus = 'idle',
   error,
+  onRetry,
 }: CalibrationScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,38 +34,34 @@ export function CalibrationScreen({
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [videoReady, setVideoReady] = useState(false);
 
-  // Debug status
-  const debugStatus = error
-    ? `Camera failed: ${error}`
-    : isLoading
-    ? 'Camera starting…'
-    : !stream
-    ? 'Requesting camera permission…'
-    : !videoReady
-    ? 'Attaching camera stream…'
-    : cameraActive
-    ? 'Camera active'
-    : 'Camera starting…';
-
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) {
       setVideoReady(false);
       return;
     }
-    // Always re-attach stream
-    video.srcObject = stream;
-    video.play().then(() => {
-      setVideoReady(true);
-      console.log('[Fitnasia] CalibrationScreen video playing:', video.videoWidth, 'x', video.videoHeight);
-    }).catch((e) => {
-      console.error('[Fitnasia] CalibrationScreen video play failed:', e);
-      // Retry after a short delay
-      setTimeout(() => {
-        video.play().then(() => setVideoReady(true)).catch(() => {});
-      }, 500);
-    });
+
+    let cancelled = false;
+    const attachStream = async () => {
+      try {
+        video.srcObject = stream;
+        await video.play();
+        if (!cancelled) {
+          setVideoReady(true);
+          console.log('[Fitnasia] Calibration preview active:', video.videoWidth, 'x', video.videoHeight);
+        }
+      } catch (attachError) {
+        console.error('[Fitnasia] Calibration preview failed:', attachError);
+        if (!cancelled) {
+          setVideoReady(false);
+        }
+      }
+    };
+
+    attachStream();
+
     return () => {
+      cancelled = true;
       video.srcObject = null;
       setVideoReady(false);
     };
@@ -74,15 +75,18 @@ export function CalibrationScreen({
       if (!video.videoWidth || !video.videoHeight) return;
       setIsLandscape(video.videoWidth > video.videoHeight);
       setViewport({ width: window.innerWidth, height: window.innerHeight });
+      setVideoReady(video.readyState >= 2);
     };
 
     video.addEventListener('loadedmetadata', updateRect);
+    video.addEventListener('canplay', updateRect);
     video.addEventListener('resize', updateRect);
     window.addEventListener('resize', updateRect);
     const interval = setInterval(updateRect, 500);
 
     return () => {
       video.removeEventListener('loadedmetadata', updateRect);
+      video.removeEventListener('canplay', updateRect);
       video.removeEventListener('resize', updateRect);
       window.removeEventListener('resize', updateRect);
       clearInterval(interval);
@@ -92,13 +96,19 @@ export function CalibrationScreen({
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video || !landmarks) return;
+    if (!canvas || !video) return;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 1280;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!landmarks || !video.videoWidth || !video.videoHeight) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     drawPose(ctx, landmarks, canvas.width, canvas.height);
-  }, [landmarks]);
+  }, [landmarks, videoReady]);
 
   const renderWidth = isLandscape ? `${viewport.height}px` : '100vw';
   const renderHeight = isLandscape ? `${viewport.width}px` : '100vh';
@@ -110,15 +120,28 @@ export function CalibrationScreen({
     width: renderWidth,
     height: renderHeight,
     objectFit: 'contain',
-    background: '#000',
     transform: isLandscape
       ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
       : 'translate(-50%, -50%) scaleX(-1)',
     transformOrigin: 'center center',
   };
 
+  const cameraMessage = error
+    ? 'Camera failed to start'
+    : cameraStatus === 'requesting-permission'
+      ? 'Requesting camera permission…'
+      : cameraStatus === 'starting-camera'
+        ? 'Camera starting…'
+        : cameraActive && videoReady
+          ? 'Camera active'
+          : isLoading
+            ? 'Camera starting…'
+            : 'Requesting camera permission…';
+
+  const showLoadingOverlay = !error && !videoReady && (cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera' || !stream);
+
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 50, background: '#000' }}>
+    <div style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 50, background: '#000' }}>
       <video
         ref={videoRef}
         autoPlay
@@ -131,15 +154,14 @@ export function CalibrationScreen({
         style={{
           ...sharedCameraStyle,
           pointerEvents: 'none',
+          background: 'transparent',
         }}
       />
 
-      {/* Debug status + calibration overlay */}
       <div style={{ position: 'fixed', bottom: 32, left: 16, right: 16, zIndex: 10 }}>
         <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
-          {/* Debug camera status */}
           <p className="font-pixel text-[8px] text-muted-foreground mb-1 tracking-wider opacity-70">
-            {debugStatus}
+            {cameraMessage}
           </p>
           <p className="font-pixel text-[10px] text-primary mb-1.5 tracking-widest">
             {bodyDetected ? 'BODY DETECTED' : 'CALIBRATING'}
@@ -154,25 +176,26 @@ export function CalibrationScreen({
         </div>
       </div>
 
-      {/* Loading state */}
-      {(isLoading || !stream) && !error && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/60">
-          <div className="text-center">
+      {showLoadingOverlay && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/40">
+          <div className="text-center px-4">
             <div className="text-4xl mb-4 animate-spin">⏳</div>
-            <p className="font-pixel text-xs text-foreground">
-              {!stream ? 'Requesting camera…' : 'Starting camera…'}
-            </p>
+            <p className="font-pixel text-xs text-foreground">{cameraMessage}</p>
           </div>
         </div>
       )}
 
-      {/* Error state */}
       {error && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/80">
-          <div className="text-center px-4">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 20 }} className="flex items-center justify-center bg-black/70">
+          <div className="text-center px-4 max-w-xs">
             <div className="text-4xl mb-4">❌</div>
-            <p className="font-pixel text-xs text-destructive mb-2">Camera Failed</p>
-            <p className="font-body text-sm text-muted-foreground">{error}</p>
+            <p className="font-pixel text-xs text-destructive mb-2">Camera access required</p>
+            <p className="font-body text-sm text-foreground mb-4">{error}</p>
+            {onRetry && (
+              <Button onClick={onRetry} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                Retry
+              </Button>
+            )}
           </div>
         </div>
       )}
