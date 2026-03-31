@@ -10,7 +10,9 @@ import {
 } from '@/lib/exercise-detection';
 import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
-  WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
+  WORKOUT_PHASES, MONSTER_MAX_HP, PLAYER_MAX_HP, MONSTER_ATTACK_DAMAGE,
+  DODGE_WINDOW_MS, DODGE_THRESHOLD, ATTACK_EVERY_N_REPS,
+  loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
   getComboMultiplier, getComboLabel,
 } from '@/lib/game-data';
