@@ -131,7 +131,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
     POSE.LEFT_KNEE, POSE.RIGHT_KNEE,
   ];
 
-  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.45)) {
+  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.3)) {
     return false;
   }
 
