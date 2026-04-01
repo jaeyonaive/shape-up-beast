@@ -106,21 +106,33 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoReady]);
 
-  const sharedMediaStyle: CSSProperties = {
+  const sharedFrameStyle: CSSProperties = {
     position: 'absolute',
     top: '50%',
     left: '50%',
     width: needsRotation ? '100vh' : '100vw',
     height: needsRotation ? '100vw' : '100vh',
+    transform: needsRotation
+      ? 'translate(-50%, -50%) rotate(90deg)'
+      : 'translate(-50%, -50%)',
+    transformOrigin: 'center center',
+    maxWidth: 'none',
+    maxHeight: 'none',
+  };
+
+  const sharedMediaStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
     objectFit: 'contain',
     objectPosition: 'center center',
-    transform: needsRotation
-      ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
-      : 'translate(-50%, -50%) scaleX(-1)',
+    transform: 'scaleX(-1)',
     transformOrigin: 'center center',
     maxWidth: 'none',
     maxHeight: 'none',
     background: 'transparent',
+    display: 'block',
   };
 
   const cameraMessage = error
@@ -148,20 +160,22 @@ export function CalibrationScreen({
           background: 'hsl(0 0% 0%)',
         }}
       >
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={sharedMediaStyle}
-        />
-        <canvas
-          ref={canvasRef}
-          style={{
-            ...sharedMediaStyle,
-            pointerEvents: 'none',
-          }}
-        />
+        <div style={sharedFrameStyle}>
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            style={sharedMediaStyle}
+          />
+          <canvas
+            ref={canvasRef}
+            style={{
+              ...sharedMediaStyle,
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
       </div>
 
       <div
