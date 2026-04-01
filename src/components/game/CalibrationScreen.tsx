@@ -31,7 +31,6 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
-  const [needsRotation, setNeedsRotation] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -71,7 +70,6 @@ export function CalibrationScreen({
     const updateMetrics = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       setVideoReady(video.readyState >= 2);
-      setNeedsRotation(video.videoWidth > video.videoHeight && window.innerHeight > window.innerWidth);
     };
 
     video.addEventListener('loadedmetadata', updateMetrics);
@@ -106,33 +104,19 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoReady]);
 
-  const sharedFrameStyle: CSSProperties = {
+  const sharedMediaStyle: CSSProperties = {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    width: needsRotation ? '100vh' : '100vw',
-    height: needsRotation ? '100vw' : '100vh',
-    transform: needsRotation
-      ? 'translate(-50%, -50%) rotate(90deg)'
-      : 'translate(-50%, -50%)',
-    transformOrigin: 'center center',
-    maxWidth: 'none',
-    maxHeight: 'none',
-  };
-
-  const sharedMediaStyle: CSSProperties = {
-    position: 'absolute',
-    inset: 0,
-    width: '100%',
-    height: '100%',
+    width: '100vw',
+    height: '100vh',
     objectFit: 'contain',
     objectPosition: 'center center',
-    transform: 'scaleX(-1)',
+    transform: 'translate(-50%, -50%) scaleX(-1)',
     transformOrigin: 'center center',
     maxWidth: 'none',
     maxHeight: 'none',
     background: 'transparent',
-    display: 'block',
   };
 
   const cameraMessage = error
@@ -160,22 +144,20 @@ export function CalibrationScreen({
           background: 'hsl(0 0% 0%)',
         }}
       >
-        <div style={sharedFrameStyle}>
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            style={sharedMediaStyle}
-          />
-          <canvas
-            ref={canvasRef}
-            style={{
-              ...sharedMediaStyle,
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          style={sharedMediaStyle}
+        />
+        <canvas
+          ref={canvasRef}
+          style={{
+            ...sharedMediaStyle,
+            pointerEvents: 'none',
+          }}
+        />
       </div>
 
       <div

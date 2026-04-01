@@ -145,29 +145,9 @@ export function usePoseDetection() {
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
-          width: { ideal: 1080 },
-          height: { ideal: 1920 },
-          aspectRatio: { ideal: 9 / 16 },
         },
         audio: false,
       });
-
-      const videoTrack = cameraStream.getVideoTracks()[0] as MediaStreamTrack & {
-        getCapabilities?: () => { zoom?: { min?: number } };
-        applyConstraints?: (constraints: MediaTrackConstraints) => Promise<void>;
-      };
-
-      try {
-        const capabilities = videoTrack.getCapabilities?.() as { zoom?: { min?: number } } | undefined;
-        const minZoom = capabilities?.zoom?.min;
-        if (typeof minZoom === 'number' && videoTrack.applyConstraints) {
-          await videoTrack.applyConstraints({
-            advanced: [{ zoom: minZoom } as MediaTrackConstraintSet],
-          } as MediaTrackConstraints);
-        }
-      } catch (zoomError) {
-        console.warn('[Fitnasia] Camera zoom constraint not supported:', zoomError);
-      }
 
       streamRef.current = cameraStream;
       setStream(cameraStream);
