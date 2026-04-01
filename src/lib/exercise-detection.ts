@@ -155,7 +155,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
 export function hasKneesVisible(landmarks: Landmark[]): boolean {
   const lKnee = landmarks[POSE.LEFT_KNEE];
   const rKnee = landmarks[POSE.RIGHT_KNEE];
-  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.4 && (rKnee.visibility ?? 0) > 0.4);
+  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.25 && (rKnee.visibility ?? 0) > 0.25);
 }
 
 function getBodyHeight(landmarks: Landmark[]): number {
