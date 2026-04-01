@@ -147,7 +147,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
   if (lH.y >= lK.y || rH.y >= rK.y) return false;
 
   const shoulderWidth = Math.abs(rS.x - lS.x);
-  if (shoulderWidth < 0.03) return false;
+  if (shoulderWidth < 0.02) return false;
 
   return true;
 }

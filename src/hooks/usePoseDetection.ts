@@ -5,7 +5,7 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 const CORE_VISIBILITY_THRESHOLD = 0.3;
 const LANDMARK_SMOOTHING = 0.35;
-const MAX_UNSTABLE_FRAMES = 6;
+const MAX_UNSTABLE_FRAMES = 12;
 
 type CameraStatus = 'idle' | 'requesting-permission' | 'starting-camera' | 'camera-active' | 'camera-failed';
 
