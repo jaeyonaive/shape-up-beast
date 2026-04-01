@@ -49,7 +49,7 @@ export interface ExerciseState {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 8;
+const BODY_DETECT_FRAMES = 5;
 const CALIBRATION_TIMEOUT_MS = 5000;
 const SMOOTHING_WINDOW = 3;
 const REP_COOLDOWN_MS = 500;
