@@ -49,7 +49,7 @@ export interface ExerciseState {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 8;
+const BODY_DETECT_FRAMES = 5;
 const CALIBRATION_TIMEOUT_MS = 5000;
 const SMOOTHING_WINDOW = 3;
 const REP_COOLDOWN_MS = 500;
@@ -131,7 +131,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
     POSE.LEFT_KNEE, POSE.RIGHT_KNEE,
   ];
 
-  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.45)) {
+  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.3)) {
     return false;
   }
 
@@ -147,7 +147,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
   if (lH.y >= lK.y || rH.y >= rK.y) return false;
 
   const shoulderWidth = Math.abs(rS.x - lS.x);
-  if (shoulderWidth < 0.03) return false;
+  if (shoulderWidth < 0.02) return false;
 
   return true;
 }
@@ -155,7 +155,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
 export function hasKneesVisible(landmarks: Landmark[]): boolean {
   const lKnee = landmarks[POSE.LEFT_KNEE];
   const rKnee = landmarks[POSE.RIGHT_KNEE];
-  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.4 && (rKnee.visibility ?? 0) > 0.4);
+  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.25 && (rKnee.visibility ?? 0) > 0.25);
 }
 
 function getBodyHeight(landmarks: Landmark[]): number {
