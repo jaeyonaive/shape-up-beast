@@ -388,18 +388,18 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   const deepByHip = smoothedHipY >= downThresholdY;
   const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
-  const isDeepEnough = deepByHip || deepByKnee;
+  const isDeepEnough = kneesVis ? (deepByHip && deepByKnee) : deepByHip;
+
+  const absoluteHipDrop = smoothedHipY - state._standingHipY;
+  const hasMinDrop = absoluteHipDrop >= MIN_ABSOLUTE_HIP_DROP;
 
   const movingDown = hipVelocity > SQUAT_NOISE_Y;
   const backToStanding = smoothedHipY <= returnThresholdY;
 
-  // Dynamic standing baseline drift correction to ignore tiny posture changes.
-  if (!state._reachedDepth && state.phase === 'standing') {
-    state._standingHipY = state._standingHipY * 0.92 + smoothedHipY * 0.08;
-  }
+  // No baseline drift — standing position is locked after calibration
 
   if (!state._reachedDepth) {
-    if (isDeepEnough) {
+    if (isDeepEnough && hasMinDrop) {
       state.phase = 'at_bottom';
       state._reachedDepth = true;
       state.feedback = 'Good depth! Stand up!';
