@@ -51,16 +51,17 @@ export interface ExerciseState {
 
 const BODY_DETECT_FRAMES = 5;
 const CALIBRATION_TIMEOUT_MS = 5000;
-const SMOOTHING_WINDOW = 3;
-const REP_COOLDOWN_MS = 500;
+const SMOOTHING_WINDOW = 5;
+const REP_COOLDOWN_MS = 800;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 140;
-const SQUAT_STANDING_ANGLE = 158;
+const SQUAT_KNEE_ANGLE_THRESHOLD = 120;
+const SQUAT_STANDING_ANGLE = 160;
 const SQUAT_DEFAULT_DROP_RATIO = 0.22;
 const SQUAT_MIN_DROP_RATIO = 0.2;
 const SQUAT_MAX_DROP_RATIO = 0.25;
-const SQUAT_RETURN_RATIO = 0.08;
-const SQUAT_NOISE_Y = 0.012;
+const SQUAT_RETURN_RATIO = 0.04;
+const SQUAT_NOISE_Y = 0.025;
+const MIN_ABSOLUTE_HIP_DROP = 0.04;
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -387,18 +388,18 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   const deepByHip = smoothedHipY >= downThresholdY;
   const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
-  const isDeepEnough = deepByHip || deepByKnee;
+  const isDeepEnough = kneesVis ? (deepByHip && deepByKnee) : deepByHip;
+
+  const absoluteHipDrop = smoothedHipY - state._standingHipY;
+  const hasMinDrop = absoluteHipDrop >= MIN_ABSOLUTE_HIP_DROP;
 
   const movingDown = hipVelocity > SQUAT_NOISE_Y;
   const backToStanding = smoothedHipY <= returnThresholdY;
 
-  // Dynamic standing baseline drift correction to ignore tiny posture changes.
-  if (!state._reachedDepth && state.phase === 'standing') {
-    state._standingHipY = state._standingHipY * 0.92 + smoothedHipY * 0.08;
-  }
+  // No baseline drift — standing position is locked after calibration
 
   if (!state._reachedDepth) {
-    if (isDeepEnough) {
+    if (isDeepEnough && hasMinDrop) {
       state.phase = 'at_bottom';
       state._reachedDepth = true;
       state.feedback = 'Good depth! Stand up!';
