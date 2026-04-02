@@ -51,16 +51,17 @@ export interface ExerciseState {
 
 const BODY_DETECT_FRAMES = 5;
 const CALIBRATION_TIMEOUT_MS = 5000;
-const SMOOTHING_WINDOW = 3;
-const REP_COOLDOWN_MS = 500;
+const SMOOTHING_WINDOW = 5;
+const REP_COOLDOWN_MS = 800;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_KNEE_ANGLE_THRESHOLD = 140;
-const SQUAT_STANDING_ANGLE = 158;
+const SQUAT_KNEE_ANGLE_THRESHOLD = 120;
+const SQUAT_STANDING_ANGLE = 160;
 const SQUAT_DEFAULT_DROP_RATIO = 0.22;
 const SQUAT_MIN_DROP_RATIO = 0.2;
 const SQUAT_MAX_DROP_RATIO = 0.25;
-const SQUAT_RETURN_RATIO = 0.08;
-const SQUAT_NOISE_Y = 0.012;
+const SQUAT_RETURN_RATIO = 0.04;
+const SQUAT_NOISE_Y = 0.025;
+const MIN_ABSOLUTE_HIP_DROP = 0.04;
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
