@@ -446,12 +446,13 @@ function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, ti
   );
 
   // Arms-only mode when ankles aren't visible (common on phones)
+  // Require BOTH arms raised for open, at least one arm down for closed
   const isOpen = anklesVisible
-    ? (armSpread >= 1 && legSpread > 1.05)
-    : (armSpread >= 1);
+    ? (armSpread >= 2 && legSpread > 1.05)
+    : (armSpread >= 2);
   const isClosed = anklesVisible
-    ? (armSpread === 0 && legSpread < 1.3)
-    : (armSpread === 0);
+    ? (armSpread <= 1 && legSpread < 1.3)
+    : (armSpread <= 1);
 
   if (state.phase === 'closed') {
     state.feedback = 'Raise BOTH arms and jump out!';
