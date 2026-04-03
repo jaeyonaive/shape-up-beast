@@ -439,11 +439,19 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
   const armSpread = getArmSpread(_landmarks);
   const legSpread = getLegSpread(_landmarks);
+  const anklesVisible = !!(
+    _landmarks[POSE.LEFT_ANKLE] && _landmarks[POSE.RIGHT_ANKLE] &&
+    (_landmarks[POSE.LEFT_ANKLE].visibility ?? 0) > 0.2 &&
+    (_landmarks[POSE.RIGHT_ANKLE].visibility ?? 0) > 0.2
+  );
 
-  // At least one arm up AND legs slightly apart
-  const isOpen = armSpread >= 1 && legSpread > 1.1;
-  // Arms down AND legs together
-  const isClosed = armSpread === 0 && legSpread < 1.3;
+  // Arms-only mode when ankles aren't visible (common on phones)
+  const isOpen = anklesVisible
+    ? (armSpread >= 1 && legSpread > 1.05)
+    : (armSpread >= 1);
+  const isClosed = anklesVisible
+    ? (armSpread === 0 && legSpread < 1.3)
+    : (armSpread === 0);
 
   if (state.phase === 'closed') {
     state.feedback = 'Raise BOTH arms and jump out!';
