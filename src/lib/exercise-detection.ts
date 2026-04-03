@@ -384,7 +384,7 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   const downThresholdY = state._standingHipY + bodyHeight * squatDropRatio;
   const returnThresholdY = state._standingHipY + bodyHeight * SQUAT_RETURN_RATIO;
-  const startMoveY = state._standingHipY + bodyHeight * 0.06;
+  const startMoveY = state._standingHipY + bodyHeight * 0.12;
 
   const deepByHip = smoothedHipY >= downThresholdY;
   const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
