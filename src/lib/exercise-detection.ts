@@ -60,8 +60,8 @@ const SQUAT_DEFAULT_DROP_RATIO = 0.22;
 const SQUAT_MIN_DROP_RATIO = 0.2;
 const SQUAT_MAX_DROP_RATIO = 0.25;
 const SQUAT_RETURN_RATIO = 0.04;
-const SQUAT_NOISE_Y = 0.025;
-const MIN_ABSOLUTE_HIP_DROP = 0.04;
+const SQUAT_NOISE_Y = 0.035;
+const MIN_ABSOLUTE_HIP_DROP = 0.07;
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -384,7 +384,7 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   const downThresholdY = state._standingHipY + bodyHeight * squatDropRatio;
   const returnThresholdY = state._standingHipY + bodyHeight * SQUAT_RETURN_RATIO;
-  const startMoveY = state._standingHipY + bodyHeight * 0.06;
+  const startMoveY = state._standingHipY + bodyHeight * 0.12;
 
   const deepByHip = smoothedHipY >= downThresholdY;
   const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
