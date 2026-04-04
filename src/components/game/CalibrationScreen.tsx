@@ -112,15 +112,23 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoDimensions]);
 
+  const shouldRotateToPortrait =
+    videoDimensions.width > videoDimensions.height &&
+    typeof window !== 'undefined' &&
+    window.innerHeight > window.innerWidth;
+
   const sharedMediaStyle: CSSProperties = {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
+    top: '50%',
+    left: '50%',
+    width: shouldRotateToPortrait ? '100dvh' : '100dvw',
+    height: shouldRotateToPortrait ? '100dvw' : '100dvh',
     objectFit: 'contain',
     objectPosition: 'center center',
-    transform: 'scaleX(-1)',
+    transform: shouldRotateToPortrait
+      ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
+      : 'translate(-50%, -50%) scaleX(-1)',
+    transformOrigin: 'center center',
     background: 'transparent',
   };
 
@@ -142,8 +150,8 @@ export function CalibrationScreen({
           position: 'fixed',
           top: 0,
           left: 0,
-          width: '100vw',
-          height: '100vh',
+          width: '100dvw',
+          height: '100dvh',
           overflow: 'hidden',
           zIndex: 50,
           background: 'hsl(0 0% 0%)',
@@ -170,8 +178,8 @@ export function CalibrationScreen({
           position: 'fixed',
           top: 0,
           left: 0,
-          width: '100vw',
-          height: '100vh',
+          width: '100dvw',
+          height: '100dvh',
           zIndex: 51,
           pointerEvents: 'none',
         }}
