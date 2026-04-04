@@ -5,7 +5,7 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 const CORE_VISIBILITY_THRESHOLD = 0.3;
 const LANDMARK_SMOOTHING = 0.6;
-const MAX_UNSTABLE_FRAMES = 12;
+const MAX_UNSTABLE_FRAMES = 8;
 
 type CameraStatus = 'idle' | 'requesting-permission' | 'starting-camera' | 'camera-active' | 'camera-failed';
 
@@ -41,7 +41,7 @@ function waitForVideoReady(video: HTMLVideoElement) {
     const timeout = window.setTimeout(() => {
       cleanup();
       reject(new Error('Camera stream did not become ready in time'));
-    }, 4000);
+    }, 6000);
 
     const onReady = () => {
       cleanup();
@@ -139,12 +139,16 @@ export function usePoseDetection() {
       video.style.width = '1px';
       video.style.height = '1px';
       video.style.pointerEvents = 'none';
+      video.style.opacity = '0';
+      video.style.visibility = 'hidden';
       document.body.appendChild(video);
       videoRef.current = video;
 
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
         },
         audio: false,
       });
@@ -172,8 +176,8 @@ export function usePoseDetection() {
         },
         runningMode: 'VIDEO' as const,
         numPoses: 1,
-        minPoseDetectionConfidence: 0.6,
-        minPosePresenceConfidence: 0.6,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
         minTrackingConfidence: 0.5,
       };
 

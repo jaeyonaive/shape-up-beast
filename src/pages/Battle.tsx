@@ -47,6 +47,12 @@ export default function Battle() {
   const prevRepRef = useRef(0);
   const lastRepTimeRef = useRef(Date.now());
   const streakRef = useRef(0);
+  const gameActiveRef = useRef(false);
+
+  // Keep gameActiveRef in sync
+  useEffect(() => {
+    gameActiveRef.current = gameActive;
+  }, [gameActive]);
 
   useEffect(() => {
     if (!gameActive || sessionOver || workoutComplete) return;
@@ -122,9 +128,12 @@ export default function Battle() {
     exerciseStateRef.current = newState;
     setDisplayState({ ...newState });
 
-    if (newState.calibrated && !gameActive) setGameActive(true);
+    if (newState.calibrated && !gameActiveRef.current) {
+      setGameActive(true);
+    }
 
-    const isActive = gameActive || newState.calibrated;
+    // Use ref to avoid stale closure
+    const isActive = gameActiveRef.current || newState.calibrated;
     if (newState.repCount > prevRepRef.current && isActive) {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
@@ -155,10 +164,9 @@ export default function Battle() {
       setIsHit(true);
       setDamageText(`-${damage}`);
 
-      // Gamified bottom message
       const messages = [
         `💥 You dealt ${damage} damage!`,
-        `🔥 Squat registered! -${damage} HP`,
+        `🔥 Rep registered! -${damage} HP`,
         `⚔️ Critical hit! ${damage} damage!`,
         `💪 Nice rep! Monster took ${damage}!`,
       ];
@@ -169,7 +177,7 @@ export default function Battle() {
 
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
     }
-  }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
+  }, [landmarks, started, sessionOver, workoutComplete]);
 
   useEffect(() => {
     if (monsterDefeated) {
@@ -220,21 +228,19 @@ export default function Battle() {
 
   if (started && !gameActive) {
     return (
-      <>
-        <CalibrationScreen
-          stream={stream}
-          landmarks={landmarks}
-          feedback={displayState.feedback}
-          calibrationProgress={displayState.calibrationProgress}
-          formQuality={displayState.formQuality}
-          bodyDetected={displayState.bodyDetected}
-          isLoading={isLoading}
-          cameraActive={cameraActive}
-          cameraStatus={cameraStatus}
-          error={error}
-          onRetry={handleStart}
-        />
-      </>
+      <CalibrationScreen
+        stream={stream}
+        landmarks={landmarks}
+        feedback={displayState.feedback}
+        calibrationProgress={displayState.calibrationProgress}
+        formQuality={displayState.formQuality}
+        bodyDetected={displayState.bodyDetected}
+        isLoading={isLoading}
+        cameraActive={cameraActive}
+        cameraStatus={cameraStatus}
+        error={error}
+        onRetry={handleStart}
+      />
     );
   }
 
@@ -242,15 +248,11 @@ export default function Battle() {
 
   return (
     <div className="h-screen w-screen relative overflow-hidden">
-      <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      {/* z-0: background */}
+      <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover z-0" />
 
-      <div className="absolute top-3 left-3 z-50">
-        <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
-          REP:{String(displayState.repCount).padStart(3, '0')}
-        </span>
-      </div>
-
-      <div className="absolute top-[11vh] left-1/2 -translate-x-1/2 z-40 w-[min(82vw,24rem)] px-2">
+      {/* z-40: HP bar — top full-width */}
+      <div className="absolute top-3 left-3 right-3 z-40">
         <div className="flex items-center gap-2">
           <span className="font-pixel text-xs text-foreground game-text-shadow">HP</span>
           <div className="flex-1 h-6 border-[3px] border-foreground bg-black">
@@ -259,33 +261,47 @@ export default function Battle() {
               style={{ width: `${hpPercent}%` }}
             />
           </div>
+          <span className="font-pixel text-[10px] text-foreground game-text-shadow">
+            {monsterHP}/{MONSTER_MAX_HP}
+          </span>
         </div>
       </div>
 
+      {/* z-40: Rep counter — below HP bar */}
+      <div className="absolute top-12 left-3 z-40">
+        <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
+          REP:{String(displayState.repCount).padStart(3, '0')}
+        </span>
+      </div>
+
+      {/* z-10: Monster */}
       <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
         <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
       </div>
 
+      {/* z-20: Floating damage */}
       {damageText && (
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-30 animate-bounce">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-20 animate-bounce">
           <span className="font-pixel text-3xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
         </div>
       )}
 
+      {/* z-20: Combo text */}
       {comboText && (
-        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 z-30 animate-bounce">
+        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 z-20 animate-bounce">
           <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
         </div>
       )}
 
+      {/* z-30: Defeat overlay */}
       {monsterDefeated && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40">
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40">
           <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
         </div>
       )}
 
-      {/* Gamified bottom message */}
-      <div className="absolute bottom-16 left-4 right-20 z-40">
+      {/* z-40: Gamified bottom message — right offset for timer */}
+      <div className="absolute bottom-16 left-4 z-40" style={{ right: '4.5rem' }}>
         <AnimatePresence>
           {gameMessage && (
             <motion.div
@@ -302,13 +318,17 @@ export default function Battle() {
         </AnimatePresence>
       </div>
 
-      <div className="absolute bottom-4 right-4 z-40 text-right">
+      {/* z-40: Timer — vertically centred on right */}
+      <div className="absolute right-4 z-40 text-right" style={{ top: '50%', transform: 'translateY(-50%)' }}>
         <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
         <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
       </div>
 
+      {/* z-50: Phase transition overlay */}
       {phaseTransition && (
-        <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
+        <div className="z-50">
+          <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
+        </div>
       )}
     </div>
   );

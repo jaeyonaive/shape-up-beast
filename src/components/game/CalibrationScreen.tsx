@@ -31,6 +31,7 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const video = videoRef.current;
@@ -47,6 +48,9 @@ export function CalibrationScreen({
         await video.play();
         if (!cancelled) {
           setVideoReady(video.readyState >= 2);
+          if (video.videoWidth && video.videoHeight) {
+            setVideoDimensions({ width: video.videoWidth, height: video.videoHeight });
+          }
         }
       } catch (attachError) {
         console.error('[Fitnasia] Calibration preview failed:', attachError);
@@ -70,6 +74,11 @@ export function CalibrationScreen({
     const updateMetrics = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       setVideoReady(video.readyState >= 2);
+      const newW = video.videoWidth;
+      const newH = video.videoHeight;
+      if (newW !== videoDimensions.width || newH !== videoDimensions.height) {
+        setVideoDimensions({ width: newW, height: newH });
+      }
     };
 
     video.addEventListener('loadedmetadata', updateMetrics);
@@ -85,15 +94,14 @@ export function CalibrationScreen({
       window.removeEventListener('resize', updateMetrics);
       clearInterval(interval);
     };
-  }, [stream]);
+  }, [stream, videoDimensions.width, videoDimensions.height]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video || !video.videoWidth || !video.videoHeight) return;
+    if (!canvas || !videoDimensions.width || !videoDimensions.height) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = videoDimensions.width;
+    canvas.height = videoDimensions.height;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -102,20 +110,17 @@ export function CalibrationScreen({
     if (landmarks) {
       drawPose(ctx, landmarks, canvas.width, canvas.height);
     }
-  }, [landmarks, videoReady]);
+  }, [landmarks, videoDimensions]);
 
   const sharedMediaStyle: CSSProperties = {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: '100vw',
-    height: '100vh',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
     objectFit: 'contain',
     objectPosition: 'center center',
-    transform: 'translate(-50%, -50%) scaleX(-1)',
-    transformOrigin: 'center center',
-    maxWidth: 'none',
-    maxHeight: 'none',
+    transform: 'scaleX(-1)',
     background: 'transparent',
   };
 
@@ -186,6 +191,9 @@ export function CalibrationScreen({
                 style={{ width: `${calibrationProgress}%` }}
               />
             </div>
+            <p className="font-pixel text-[8px] text-muted-foreground mt-1 tracking-wider">
+              {calibrationProgress}%
+            </p>
           </div>
         </div>
 
