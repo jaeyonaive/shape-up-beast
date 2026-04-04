@@ -41,6 +41,8 @@ export interface ExerciseState {
   // JJ-specific
   _jjArmThreshold: number;
   _jjLegThreshold: number;
+  _jjOpenConfirmFrames: number;
+  _jjClosedConfirmFrames: number;
 
   // Lunge-specific
   _lungeKneeThreshold: number;
@@ -52,18 +54,30 @@ export interface ExerciseState {
 const BODY_DETECT_FRAMES = 5;
 const CALIBRATION_TIMEOUT_MS = 5000;
 const SMOOTHING_WINDOW = 5;
-const REP_COOLDOWN_MS = 800;
+
+// 500ms cooldown between reps prevents double-counting
+const REP_COOLDOWN_MS = 500;
+
 const MAX_OCCLUSION_FRAMES = 20;
 const SQUAT_KNEE_ANGLE_THRESHOLD = 120;
-const SQUAT_STANDING_ANGLE = 160;
-const SQUAT_DEFAULT_DROP_RATIO = 0.22;
-const SQUAT_MIN_DROP_RATIO = 0.2;
-const SQUAT_MAX_DROP_RATIO = 0.25;
-const SQUAT_RETURN_RATIO = 0.04;
-const SQUAT_NOISE_Y = 0.035;
-const MIN_ABSOLUTE_HIP_DROP = 0.07;
 
-// Damage per exercise
+// Squat thresholds
+const SQUAT_DEFAULT_DROP_RATIO = 0.22;
+const SQUAT_MIN_DROP_RATIO = 0.20;
+const SQUAT_MAX_DROP_RATIO = 0.25;
+
+// Must return to within 8% of standing hip height to count the rep
+const SQUAT_RETURN_RATIO = 0.08;
+
+// Noise floor for hip movement detection
+const SQUAT_NOISE_Y = 0.02;
+
+// Minimum absolute hip drop in normalised coordinates
+const MIN_ABSOLUTE_HIP_DROP = 0.04;
+
+// Consecutive frames required to confirm JJ open/closed state
+const JJ_CONFIRM_FRAMES = 3;
+
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
   squats: 8,
   jumping_jacks: 5,
@@ -110,6 +124,8 @@ export function createExerciseState(exerciseType: ExerciseType): ExerciseState {
     _baselineSquatDone: false,
     _jjArmThreshold: 0,
     _jjLegThreshold: 0,
+    _jjOpenConfirmFrames: 0,
+    _jjClosedConfirmFrames: 0,
     _lungeKneeThreshold: 0,
     _lastLungeLeg: 'left',
   };
@@ -125,7 +141,6 @@ function getMidHipY(landmarks: Landmark[]): number {
 }
 
 function hasFullBody(landmarks: Landmark[]): boolean {
-  // Require shoulders + hips + knees for rep counting
   const required = [
     POSE.LEFT_SHOULDER, POSE.RIGHT_SHOULDER,
     POSE.LEFT_HIP, POSE.RIGHT_HIP,
@@ -143,7 +158,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
   const lK = landmarks[POSE.LEFT_KNEE];
   const rK = landmarks[POSE.RIGHT_KNEE];
 
-  // Anatomical ordering (top -> bottom)
+  // Anatomical ordering: shoulders above hips above knees (y increases downward)
   if (lS.y >= lH.y || rS.y >= rH.y) return false;
   if (lH.y >= lK.y || rH.y >= rK.y) return false;
 
@@ -165,7 +180,6 @@ function getBodyHeight(landmarks: Landmark[]): number {
   const lKnee = landmarks[POSE.LEFT_KNEE];
   const rKnee = landmarks[POSE.RIGHT_KNEE];
   if (!lShoulder || !rShoulder || !lKnee || !rKnee) return 0;
-
   const shoulderY = (lShoulder.y + rShoulder.y) / 2;
   const kneeY = (lKnee.y + rKnee.y) / 2;
   return Math.max(0, kneeY - shoulderY);
@@ -175,12 +189,17 @@ function smoothY(history: number[], newVal: number): { smoothed: number; history
   const updated = [...history, newVal].slice(-SMOOTHING_WINDOW);
   const sorted = [...updated].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
+  // Median filter — robust to sudden noise/spikes
   const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
   return { smoothed: median, history: updated };
 }
 
-// ─── Jumping Jack helpers ────────────────────────────────────────────────────
+// ─── Jumping Jack helpers ─────────────────────────────────────────────────────
 
+/**
+ * Returns count of arms fully raised (both wrist AND elbow above shoulder required).
+ * Using stricter check than original to avoid false positives from partial raises.
+ */
 function getArmSpread(landmarks: Landmark[]): number {
   const lWrist = landmarks[POSE.LEFT_WRIST];
   const rWrist = landmarks[POSE.RIGHT_WRIST];
@@ -190,9 +209,27 @@ function getArmSpread(landmarks: Landmark[]): number {
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
   if (!lWrist || !rWrist || !lShoulder || !rShoulder || !lElbow || !rElbow) return 0;
 
-  const lUp = lWrist.y < lShoulder.y || lElbow.y < lShoulder.y;
-  const rUp = rWrist.y < rShoulder.y || rElbow.y < rShoulder.y;
+  // y increases downward, so "above shoulder" means y < shoulder.y
+  const lUp = lWrist.y < lShoulder.y && lElbow.y < lShoulder.y;
+  const rUp = rWrist.y < rShoulder.y && rElbow.y < rShoulder.y;
   return (lUp ? 1 : 0) + (rUp ? 1 : 0);
+}
+
+/**
+ * Returns true when both arms are clearly lowered — prevents premature "closed" detection.
+ */
+function armsDown(landmarks: Landmark[]): boolean {
+  const lWrist = landmarks[POSE.LEFT_WRIST];
+  const rWrist = landmarks[POSE.RIGHT_WRIST];
+  const lElbow = landmarks[POSE.LEFT_ELBOW];
+  const rElbow = landmarks[POSE.RIGHT_ELBOW];
+  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
+  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
+  if (!lWrist || !rWrist || !lShoulder || !rShoulder || !lElbow || !rElbow) return false;
+
+  const lDown = lWrist.y > lShoulder.y && lElbow.y > lShoulder.y;
+  const rDown = rWrist.y > rShoulder.y && rElbow.y > rShoulder.y;
+  return lDown && rDown;
 }
 
 function getLegSpread(landmarks: Landmark[]): number {
@@ -205,6 +242,14 @@ function getLegSpread(landmarks: Landmark[]): number {
   const hipWidth = Math.abs(rHip.x - lHip.x);
   const ankleWidth = Math.abs(rAnkle.x - lAnkle.x);
   return hipWidth > 0 ? ankleWidth / hipWidth : 0;
+}
+
+function anklesVisible(landmarks: Landmark[]): boolean {
+  return !!(
+    landmarks[POSE.LEFT_ANKLE] && landmarks[POSE.RIGHT_ANKLE] &&
+    (landmarks[POSE.LEFT_ANKLE].visibility ?? 0) > 0.2 &&
+    (landmarks[POSE.RIGHT_ANKLE].visibility ?? 0) > 0.2
+  );
 }
 
 // ─── Lunge helpers ───────────────────────────────────────────────────────────
@@ -231,18 +276,19 @@ function detectLungeSide(landmarks: Landmark[]): 'left' | 'right' | null {
   return lKnee.y > rKnee.y ? 'left' : 'right';
 }
 
-// ─── Main Detection ──────────────────────────────────────────────────────────
+// ─── Main Detection Entry ─────────────────────────────────────────────────────
 
 export function detectExercise(landmarks: Landmark[], prevState: ExerciseState): ExerciseState {
   const now = Date.now();
   const kneesVis = hasKneesVisible(landmarks);
 
-  // Body visibility check
+  // ── Body visibility check ──
   if (!hasFullBody(landmarks)) {
     const occ = prevState._occludedFrames + 1;
+    if (occ === 1) console.log('[Detection] Body not detected');
     return {
       ...prevState,
-      feedback: 'No body detected',
+      feedback: 'No body detected — step into frame',
       formQuality: 'neutral',
       bodyDetected: false,
       kneesVisible: kneesVis,
@@ -258,6 +304,7 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   }
 
   const { smoothed: smoothedHipY, history: newHipYHistory } = smoothY(prevState._hipYHistory, hipY);
+
   let state: ExerciseState = {
     ...prevState,
     _hipYHistory: newHipYHistory,
@@ -266,7 +313,12 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     kneesVisible: kneesVis,
   };
 
-  // ═══ WAITING: detect body ═══
+  // Log body re-detection
+  if (!prevState.bodyDetected) {
+    console.log('[Detection] Body detected');
+  }
+
+  // ═══ WAITING ═══
   if (prevState.phase === 'waiting') {
     const frames = (prevState._bodyDetectFrames || 0) + 1;
     state._bodyDetectFrames = frames;
@@ -275,9 +327,10 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
       state._calibStartTime = now;
       state._calibMinHipY = smoothedHipY;
       state._calibMaxHipY = smoothedHipY;
-      state.feedback = 'Body detected! Stand still...';
+      state.feedback = 'Body detected! Stand still to calibrate...';
       state.formQuality = 'good';
       state.calibrationProgress = 20;
+      console.log('[Detection] Body detected — starting calibration');
     } else {
       state.feedback = 'Detecting body...';
       state.calibrationProgress = Math.round((frames / BODY_DETECT_FRAMES) * 20);
@@ -285,51 +338,50 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     return state;
   }
 
-  // ═══ CALIBRATING: capture standing position, then ask for one squat ═══
+  // ═══ CALIBRATING ═══
   if (prevState.phase === 'calibrating') {
     const elapsed = now - prevState._calibStartTime;
 
-    // Record standing hip Y for 1.5 seconds
+    // Phase 1: Record standing position for 1.5s
     if (elapsed < 1500) {
       state._calibMinHipY = Math.min(prevState._calibMinHipY, smoothedHipY);
       state._calibMaxHipY = Math.max(prevState._calibMaxHipY, smoothedHipY);
       state._standingHipY = (state._calibMinHipY + state._calibMaxHipY) / 2;
       state.calibrationProgress = Math.min(40, Math.round(20 + (elapsed / 1500) * 20));
-      state.feedback = 'Stand straight... capturing your height';
+      state.feedback = 'Stand straight... capturing your standing height';
       state.formQuality = 'neutral';
       return state;
     }
 
-    // After 1.5s of standing, save standing position & ask for a squat
+    // Phase 2: Ask for one squat
     if (!prevState._baselineSquatDone) {
       state._standingHipY = prevState._standingHipY || prevState._calibMinHipY;
-
-      // Check if they've performed a squat (hip dropped significantly)
       const hipDropRatio = (smoothedHipY - state._standingHipY) / bodyHeight;
 
       if (hipDropRatio >= SQUAT_MIN_DROP_RATIO) {
-        // They squatted! Record it
         state._squatHipY = smoothedHipY;
         state._squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, Math.max(SQUAT_MIN_DROP_RATIO, hipDropRatio * 0.85));
         state._threshold = state._standingHipY + bodyHeight * state._squatDropRatio;
         state._baselineSquatDone = true;
         state.calibrationProgress = 90;
-        state.feedback = 'Great squat! Stand back up...';
+        state.feedback = 'Great squat! Now stand back up to start!';
         state.formQuality = 'good';
+        console.log('[Detection] Calibration squat confirmed — drop ratio:', hipDropRatio.toFixed(3));
         return state;
       }
 
-      // Timeout: use defaults after 5 seconds total
       if (elapsed >= CALIBRATION_TIMEOUT_MS) {
+        // Timed out — use conservative defaults
         state._squatDropRatio = SQUAT_DEFAULT_DROP_RATIO;
         state._squatHipY = state._standingHipY + bodyHeight * state._squatDropRatio;
         state._threshold = state._standingHipY + bodyHeight * state._squatDropRatio;
         state._baselineSquatDone = true;
         state.calibrationProgress = 90;
-        // Fall through to finish calibration
+        console.log('[Detection] Calibration timeout — defaults applied. standingHipY:', state._standingHipY.toFixed(3));
+        // Fall through to finish
       } else {
         state.calibrationProgress = Math.min(80, Math.round(40 + ((elapsed - 1500) / (CALIBRATION_TIMEOUT_MS - 1500)) * 40));
-        state.feedback = 'Now do one squat to calibrate...';
+        state.feedback = 'Do one squat to calibrate!';
         state.formQuality = 'neutral';
         return state;
       }
@@ -341,9 +393,21 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     state.formQuality = 'good';
 
     switch (state.exerciseType) {
-      case 'squats': state.phase = 'standing'; state.feedback = 'GO! Squat!'; break;
-      case 'jumping_jacks': state.phase = 'closed'; state.feedback = 'GO! Jump!'; break;
-      case 'lunges': state.phase = 'lunge_standing'; state.feedback = 'GO! Lunge!'; break;
+      case 'squats':
+        state.phase = 'standing';
+        state.feedback = 'GO! Squat!';
+        console.log('[Detection] Calibration done — squats. thresholdY:', state._threshold.toFixed(3), 'standingY:', state._standingHipY.toFixed(3));
+        break;
+      case 'jumping_jacks':
+        state.phase = 'closed';
+        state.feedback = 'GO! Jumping Jacks!';
+        console.log('[Detection] Calibration done — jumping jacks');
+        break;
+      case 'lunges':
+        state.phase = 'lunge_standing';
+        state.feedback = 'GO! Lunge!';
+        console.log('[Detection] Calibration done — lunges');
+        break;
     }
     return state;
   }
@@ -353,7 +417,7 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
   switch (prevState.exerciseType) {
     case 'squats':
-      return detectSquatPhase(landmarks, state, smoothedHipY, timeSinceRep, now);
+      return detectSquatPhase(landmarks, state, smoothedHipY, timeSinceRep, now, bodyHeight);
     case 'jumping_jacks':
       return detectJumpingJackPhase(landmarks, state, timeSinceRep, now);
     case 'lunges':
@@ -361,7 +425,12 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   }
 }
 
-// ─── Squat Detection (hip-primary, knee-secondary fallback) ─────────────────
+// ─── Squat Detection ──────────────────────────────────────────────────────────
+//
+// State machine: standing → descending → at_bottom → ascending → (rep) → standing
+// Only counts a rep when:
+//   1. Hip drops >= 20–25% of body height (+ knee angle confirmation if visible)
+//   2. User fully returns to near-standing position
 
 function getAvgKneeAngle(landmarks: Landmark[]): number {
   const leftAngle = calculateAngle(
@@ -374,36 +443,49 @@ function getAvgKneeAngle(landmarks: Landmark[]): number {
   return leftAngle > 0 ? leftAngle : rightAngle;
 }
 
-function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
+function detectSquatPhase(
+  landmarks: Landmark[],
+  state: ExerciseState,
+  smoothedHipY: number,
+  timeSinceRep: number,
+  now: number,
+  bodyHeight: number,
+): ExerciseState {
   const kneesVis = hasKneesVisible(landmarks);
   const kneeAngle = kneesVis ? getAvgKneeAngle(landmarks) : 999;
-  const bodyHeight = Math.max(getBodyHeight(landmarks), 0.001);
-  const prevHipY = state._hipYHistory[state._hipYHistory.length - 2] ?? smoothedHipY;
-  const hipVelocity = smoothedHipY - prevHipY;
-  const squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio || SQUAT_DEFAULT_DROP_RATIO));
+  const safeBodyHeight = Math.max(bodyHeight, 0.001);
 
-  const downThresholdY = state._standingHipY + bodyHeight * squatDropRatio;
-  const returnThresholdY = state._standingHipY + bodyHeight * SQUAT_RETURN_RATIO;
-  const startMoveY = state._standingHipY + bodyHeight * 0.12;
+  const squatDropRatio = Math.min(
+    SQUAT_MAX_DROP_RATIO,
+    Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio || SQUAT_DEFAULT_DROP_RATIO)
+  );
+
+  // Threshold Y positions (y increases downward in MediaPipe)
+  const downThresholdY = state._standingHipY + safeBodyHeight * squatDropRatio;
+  const returnThresholdY = state._standingHipY + safeBodyHeight * SQUAT_RETURN_RATIO;
+  const startMoveY = state._standingHipY + safeBodyHeight * 0.06;
 
   const deepByHip = smoothedHipY >= downThresholdY;
   const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
+  // When knees visible: require both hip depth AND knee angle (prevents false positives)
+  // When knees not visible: hip-only fallback
   const isDeepEnough = kneesVis ? (deepByHip && deepByKnee) : deepByHip;
 
   const absoluteHipDrop = smoothedHipY - state._standingHipY;
   const hasMinDrop = absoluteHipDrop >= MIN_ABSOLUTE_HIP_DROP;
 
+  const prevHipY = state._hipYHistory[state._hipYHistory.length - 2] ?? smoothedHipY;
+  const hipVelocity = smoothedHipY - prevHipY;
   const movingDown = hipVelocity > SQUAT_NOISE_Y;
   const backToStanding = smoothedHipY <= returnThresholdY;
-
-  // No baseline drift — standing position is locked after calibration
 
   if (!state._reachedDepth) {
     if (isDeepEnough && hasMinDrop) {
       state.phase = 'at_bottom';
       state._reachedDepth = true;
-      state.feedback = 'Good depth! Stand up!';
+      state.feedback = 'Good depth! Stand back up!';
       state.formQuality = 'good';
+      console.log('[Detection] Squat depth reached — hipY:', smoothedHipY.toFixed(3), 'threshold:', downThresholdY.toFixed(3));
       return state;
     }
 
@@ -412,76 +494,116 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
       state.feedback = 'Going down...';
     } else {
       state.phase = 'standing';
-      state.feedback = 'Tracking active';
+      state.feedback = 'Squat!';
     }
     state.formQuality = 'neutral';
     return state;
   }
 
-  if (state._reachedDepth && backToStanding && timeSinceRep >= REP_COOLDOWN_MS) {
+  // Was at depth — waiting to return to standing
+  if (backToStanding && timeSinceRep >= REP_COOLDOWN_MS) {
     state.repCount += 1;
     state._lastRepTime = now;
     state._reachedDepth = false;
     state.phase = 'standing';
     state.feedback = `Rep ${state.repCount}!`;
     state.formQuality = 'good';
+    console.log('[Detection] Squat rep counted:', state.repCount);
     return state;
   }
 
   state.phase = 'ascending';
-  state.feedback = 'Come back up...';
+  state.feedback = backToStanding ? 'Squat again!' : 'Come back up...';
   state.formQuality = 'good';
   return state;
 }
 
-// ─── Jumping Jack Detection ──────────────────────────────────────────────────
+// ─── Jumping Jack Detection ───────────────────────────────────────────────────
+//
+// State machine: closed → (N confirm frames open) → open → (N confirm frames closed) → (rep) → closed
+//
+// Key fixes vs original:
+// - Both wrist AND elbow must be above shoulder (not just one)
+// - Both arms must go up (armSpread >= 2, not >= 1)
+// - Require JJ_CONFIRM_FRAMES consecutive frames to confirm state change
+// - armsDown() check requires both wrists AND elbows below shoulder
 
-function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
-  const armSpread = getArmSpread(_landmarks);
-  const legSpread = getLegSpread(_landmarks);
-  const anklesVisible = !!(
-    _landmarks[POSE.LEFT_ANKLE] && _landmarks[POSE.RIGHT_ANKLE] &&
-    (_landmarks[POSE.LEFT_ANKLE].visibility ?? 0) > 0.2 &&
-    (_landmarks[POSE.RIGHT_ANKLE].visibility ?? 0) > 0.2
-  );
+function detectJumpingJackPhase(
+  landmarks: Landmark[],
+  state: ExerciseState,
+  timeSinceRep: number,
+  now: number,
+): ExerciseState {
+  const armSpread = getArmSpread(landmarks);
+  const legSpread = getLegSpread(landmarks);
+  const hasAnkles = anklesVisible(landmarks);
 
-  // Arms-only mode when ankles aren't visible (common on phones)
-  // Require BOTH arms raised for open, at least one arm down for closed
-  const isOpen = anklesVisible
-    ? (armSpread >= 2 && legSpread > 1.05)
-    : (armSpread >= 2);
-  const isClosed = anklesVisible
-    ? (armSpread <= 1 && legSpread < 1.3)
-    : (armSpread <= 1);
+  // Open = both arms fully up + legs spread (if ankles visible)
+  const armsFullyUp = armSpread >= 2;
+  const legsSpread = hasAnkles ? legSpread > 1.4 : true;
+  const isOpenFrame = armsFullyUp && legsSpread;
+
+  // Closed = both arms down + legs together (if ankles visible)
+  const armsFullyDown = armsDown(landmarks);
+  const legsTogether = hasAnkles ? legSpread < 1.2 : true;
+  const isClosedFrame = armsFullyDown && legsTogether;
 
   if (state.phase === 'closed') {
-    state.feedback = 'Raise BOTH arms and jump out!';
-    state.formQuality = 'neutral';
-    if (isOpen) {
-      state.phase = 'open';
-      state.feedback = 'Arms up! Now close!';
-      state.formQuality = 'good';
+    if (isOpenFrame) {
+      const confirm = (state._jjOpenConfirmFrames || 0) + 1;
+      state._jjOpenConfirmFrames = confirm;
+      if (confirm >= JJ_CONFIRM_FRAMES) {
+        state.phase = 'open';
+        state._jjOpenConfirmFrames = 0;
+        state._jjClosedConfirmFrames = 0;
+        state.feedback = 'Arms up! Now close!';
+        state.formQuality = 'good';
+        console.log('[Detection] Jumping jack open confirmed');
+      } else {
+        state.feedback = 'Arms up! Keep going!';
+        state.formQuality = 'good';
+      }
+    } else {
+      state._jjOpenConfirmFrames = 0;
+      state.feedback = 'Raise BOTH arms and jump out!';
+      state.formQuality = 'neutral';
     }
     return state;
   }
 
   if (state.phase === 'open') {
-    state.feedback = 'Arms down and feet together!';
-    if (isClosed && timeSinceRep >= REP_COOLDOWN_MS) {
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state.phase = 'closed';
-      state.feedback = `Rep ${state.repCount}!`;
-      state.formQuality = 'good';
+    if (isClosedFrame && timeSinceRep >= REP_COOLDOWN_MS) {
+      const confirm = (state._jjClosedConfirmFrames || 0) + 1;
+      state._jjClosedConfirmFrames = confirm;
+      if (confirm >= JJ_CONFIRM_FRAMES) {
+        state.repCount += 1;
+        state._lastRepTime = now;
+        state.phase = 'closed';
+        state._jjOpenConfirmFrames = 0;
+        state._jjClosedConfirmFrames = 0;
+        state.feedback = `Rep ${state.repCount}!`;
+        state.formQuality = 'good';
+        console.log('[Detection] Jumping jack rep counted:', state.repCount);
+      } else {
+        state.feedback = 'Feet together!';
+        state.formQuality = 'good';
+      }
+    } else {
+      state._jjClosedConfirmFrames = 0;
+      state.feedback = 'Arms down and feet together!';
+      state.formQuality = isOpenFrame ? 'good' : 'neutral';
     }
     return state;
   }
 
+  // Fallback — reset to closed
   state.phase = 'closed';
+  state._jjOpenConfirmFrames = 0;
+  state._jjClosedConfirmFrames = 0;
   return state;
 }
 
-// ─── Lunge Detection ─────────────────────────────────────────────────────────
+// ─── Lunge Detection ──────────────────────────────────────────────────────────
 
 function detectLungePhase(landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
   const lungeSide = detectLungeSide(landmarks);
@@ -490,13 +612,14 @@ function detectLungePhase(landmarks: Landmark[], state: ExerciseState, timeSince
   const isStanding = kneeAngle > 155;
 
   if (state.phase === 'lunge_standing') {
-    state.feedback = 'Tracking active';
+    state.feedback = 'Lunge forward!';
     state.formQuality = 'neutral';
     if (isLunging) {
       state.phase = 'lunge_down';
       state._lastLungeLeg = lungeSide || 'left';
-      state.feedback = 'Lunge down!';
+      state.feedback = 'Hold... push back up!';
       state.formQuality = 'good';
+      console.log('[Detection] Lunge down');
     }
     return state;
   }
@@ -508,8 +631,9 @@ function detectLungePhase(landmarks: Landmark[], state: ExerciseState, timeSince
       state.phase = 'lunge_standing';
       state.feedback = `Rep ${state.repCount}!`;
       state.formQuality = 'good';
+      console.log('[Detection] Lunge rep counted:', state.repCount);
     } else if (isLunging) {
-      state.feedback = 'Hold... come back up!';
+      state.feedback = 'Good! Come back up!';
     }
     return state;
   }
@@ -521,6 +645,7 @@ function detectLungePhase(landmarks: Landmark[], state: ExerciseState, timeSince
       state.phase = 'lunge_standing';
       state.feedback = `Rep ${state.repCount}!`;
       state.formQuality = 'good';
+      console.log('[Detection] Lunge rep counted:', state.repCount);
     }
     return state;
   }
@@ -528,6 +653,5 @@ function detectLungePhase(landmarks: Landmark[], state: ExerciseState, timeSince
   if (!['lunge_standing', 'lunge_down', 'lunge_returning'].includes(state.phase)) {
     state.phase = 'lunge_standing';
   }
-
   return state;
 }

@@ -31,7 +31,9 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [videoDimensions, setVideoDimensions] = useState<{ w: number; h: number } | null>(null);
 
+  // Attach stream to visible calibration video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) {
@@ -45,11 +47,11 @@ export function CalibrationScreen({
       try {
         video.srcObject = stream;
         await video.play();
-        if (!cancelled) {
-          setVideoReady(video.readyState >= 2);
+        if (!cancelled && video.readyState >= 2) {
+          setVideoReady(true);
         }
       } catch (attachError) {
-        console.error('[Fitnasia] Calibration preview failed:', attachError);
+        console.error('[Calibration] Preview attach failed:', attachError);
         if (!cancelled) setVideoReady(false);
       }
     };
@@ -63,37 +65,42 @@ export function CalibrationScreen({
     };
   }, [stream]);
 
+  // Track video dimensions for canvas sizing
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    const updateMetrics = () => {
-      if (!video.videoWidth || !video.videoHeight) return;
-      setVideoReady(video.readyState >= 2);
+    const updateDimensions = () => {
+      if (video.videoWidth && video.videoHeight) {
+        setVideoDimensions({ w: video.videoWidth, h: video.videoHeight });
+        setVideoReady(video.readyState >= 2);
+      }
     };
 
-    video.addEventListener('loadedmetadata', updateMetrics);
-    video.addEventListener('canplay', updateMetrics);
-    video.addEventListener('resize', updateMetrics);
-    window.addEventListener('resize', updateMetrics);
-    const interval = setInterval(updateMetrics, 300);
+    video.addEventListener('loadedmetadata', updateDimensions);
+    video.addEventListener('canplay', updateDimensions);
+    video.addEventListener('resize', updateDimensions);
+    window.addEventListener('resize', updateDimensions);
+    const interval = setInterval(updateDimensions, 300);
 
     return () => {
-      video.removeEventListener('loadedmetadata', updateMetrics);
-      video.removeEventListener('canplay', updateMetrics);
-      video.removeEventListener('resize', updateMetrics);
-      window.removeEventListener('resize', updateMetrics);
+      video.removeEventListener('loadedmetadata', updateDimensions);
+      video.removeEventListener('canplay', updateDimensions);
+      video.removeEventListener('resize', updateDimensions);
+      window.removeEventListener('resize', updateDimensions);
       clearInterval(interval);
     };
   }, [stream]);
 
+  // Draw pose skeleton on canvas — aligned to the contain-fit video area
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video || !video.videoWidth || !video.videoHeight) return;
+    if (!canvas || !video || !videoDimensions) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Set canvas resolution to match video
+    canvas.width = videoDimensions.w;
+    canvas.height = videoDimensions.h;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -102,21 +109,22 @@ export function CalibrationScreen({
     if (landmarks) {
       drawPose(ctx, landmarks, canvas.width, canvas.height);
     }
-  }, [landmarks, videoReady]);
+  }, [landmarks, videoDimensions]);
 
-  const sharedMediaStyle: CSSProperties = {
+  // Full-screen portrait camera: object-fit contain shows the full body (head to feet)
+  // scaleX(-1) mirrors so the user sees a natural reflection
+  const fullScreenMediaStyle: CSSProperties = {
     position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: '100vw',
-    height: '100vh',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    // contain: never crops the body — user always sees head to toe
     objectFit: 'contain',
     objectPosition: 'center center',
-    transform: 'translate(-50%, -50%) scaleX(-1)',
+    transform: 'scaleX(-1)',
     transformOrigin: 'center center',
-    maxWidth: 'none',
-    maxHeight: 'none',
-    background: 'transparent',
+    background: '#000',
   };
 
   const cameraMessage = error
@@ -127,21 +135,20 @@ export function CalibrationScreen({
         ? 'Requesting camera permission…'
         : 'Camera starting…';
 
-  const bodyMessage = bodyDetected ? 'Body detected' : 'Body not detected';
+  const bodyMessage = bodyDetected ? '✓ Body detected' : 'Body not detected';
   const showLoading = !error && !videoReady && (isLoading || cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera');
 
   return (
     <>
+      {/* Camera layer — full screen, z-50 */}
       <div
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
+          top: 0, left: 0,
+          width: '100vw', height: '100vh',
           overflow: 'hidden',
           zIndex: 50,
-          background: 'hsl(0 0% 0%)',
+          background: '#000',
         }}
       >
         <video
@@ -149,48 +156,54 @@ export function CalibrationScreen({
           autoPlay
           playsInline
           muted
-          style={sharedMediaStyle}
+          style={fullScreenMediaStyle}
         />
+        {/* Skeleton overlay canvas — same contain-fit dimensions */}
         <canvas
           ref={canvasRef}
           style={{
-            ...sharedMediaStyle,
+            ...fullScreenMediaStyle,
             pointerEvents: 'none',
           }}
         />
       </div>
 
+      {/* UI overlay layer — z-51, pointer-events only on interactive elements */}
       <div
         style={{
           position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
+          top: 0, left: 0,
+          width: '100vw', height: '100vh',
           zIndex: 51,
           pointerEvents: 'none',
         }}
       >
+        {/* Status panel — bottom of screen, always visible */}
         <div style={{ position: 'absolute', bottom: 32, left: 16, right: 16, pointerEvents: 'auto' }}>
-          <div className="bg-black/60 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
+          <div className="bg-black/70 backdrop-blur-sm rounded-xl px-4 py-3 text-center">
             <p className="font-pixel text-[8px] text-muted-foreground mb-1 tracking-wider opacity-70">
               {cameraMessage}
             </p>
-            <p className="font-pixel text-[10px] text-primary mb-1.5 tracking-widest">
+            <p className={`font-pixel text-[10px] mb-1.5 tracking-widest ${bodyDetected ? 'text-primary' : 'text-muted-foreground'}`}>
               {bodyMessage.toUpperCase()}
             </p>
             <p className="font-body text-sm text-foreground">{feedback}</p>
+            {/* Calibration progress bar */}
             <div className="w-full h-1.5 bg-white/20 rounded-full overflow-hidden mt-2">
               <div
                 className="h-full bg-primary rounded-full transition-all duration-300"
                 style={{ width: `${calibrationProgress}%` }}
               />
             </div>
+            <p className="font-pixel text-[8px] text-muted-foreground mt-1 opacity-60">
+              {calibrationProgress}% calibrated
+            </p>
           </div>
         </div>
 
+        {/* Loading spinner */}
         {showLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50" style={{ pointerEvents: 'auto' }}>
             <div className="text-center px-4">
               <div className="text-4xl mb-4 animate-spin">⏳</div>
               <p className="font-pixel text-xs text-foreground">{cameraMessage}</p>
@@ -198,8 +211,9 @@ export function CalibrationScreen({
           </div>
         )}
 
+        {/* Error state */}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70" style={{ pointerEvents: 'auto' }}>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/80" style={{ pointerEvents: 'auto' }}>
             <div className="text-center px-4 max-w-xs">
               <div className="text-4xl mb-4">❌</div>
               <p className="font-pixel text-xs text-destructive mb-2">Camera access required</p>
