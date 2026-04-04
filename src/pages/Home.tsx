@@ -6,37 +6,31 @@ export default function Home() {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-black">
-      {/* Base background image — the user's exact design, preserved at original aspect ratio */}
+      {/* Background image — covers full screen, preserving design */}
       <img
         src={titleBg}
         alt="Fitnasia"
         className="absolute inset-0 w-full h-full object-cover title-entrance"
       />
 
-      {/* Animated cloud overlays — pixel-art style, slow horizontal drift */}
+      {/* Animated cloud overlays — subtle pixel-art drift */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-[1]">
-        <div className="cloud-drift-1 absolute" style={{ top: '6%', width: '25vw', height: '12vh', opacity: 0.6 }}>
-          <div className="w-full h-full bg-white/30 rounded-full blur-[2px]" style={{ imageRendering: 'pixelated' }} />
+        <div className="cloud-drift-1 absolute" style={{ top: '8%', width: '22vw', height: '10vh', opacity: 0.45 }}>
+          <div className="w-full h-full bg-white/30 rounded-full blur-sm" />
         </div>
-        <div className="cloud-drift-2 absolute" style={{ top: '14%', width: '18vw', height: '9vh', opacity: 0.4 }}>
-          <div className="w-full h-full bg-white/25 rounded-full blur-[2px]" style={{ imageRendering: 'pixelated' }} />
+        <div className="cloud-drift-2 absolute" style={{ top: '15%', width: '16vw', height: '7vh', opacity: 0.35 }}>
+          <div className="w-full h-full bg-white/25 rounded-full blur-sm" />
         </div>
       </div>
 
-      {/* Subtle grass sway overlay at the bottom */}
-      <div className="absolute bottom-0 left-0 right-0 h-[15vh] pointer-events-none z-[2] grass-sway" />
+      {/* Grass sway overlay at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 h-[12vh] pointer-events-none z-[2] grass-sway" />
 
-      {/* Invisible tap target over existing PLAY button in the design (~55-60% from top) */}
+      {/* Play button overlay — positioned over the red PLAY button in the design */}
       <button
         onClick={() => navigate('/battle/0')}
-        className="absolute left-1/2 top-[55%] -translate-x-1/2 -translate-y-1/2 w-[45vw] h-[8vh] z-10 active:scale-95 transition-transform duration-150"
+        className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 w-[42vw] h-[7vh] z-10 active:scale-95 transition-transform duration-150 rounded-full"
         aria-label="Start Game"
-      />
-      {/* Invisible tap target for "How to Play" — below the play button */}
-      <button
-        onClick={() => navigate('/tutorial')}
-        className="absolute left-1/2 top-[65%] -translate-x-1/2 -translate-y-1/2 w-[40vw] h-[6vh] z-10 active:scale-95 transition-transform duration-150"
-        aria-label="How to Play"
       />
     </div>
   );
