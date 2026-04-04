@@ -48,13 +48,6 @@ export default function Battle() {
   const lastRepTimeRef = useRef(Date.now());
   const streakRef = useRef(0);
 
-  // Use ref so rep-counting effect always has latest gameActive without stale closure
-  const gameActiveRef = useRef(false);
-  useEffect(() => {
-    gameActiveRef.current = gameActive;
-  }, [gameActive]);
-
-  // Phase timer
   useEffect(() => {
     if (!gameActive || sessionOver || workoutComplete) return;
     const interval = setInterval(() => {
@@ -70,7 +63,6 @@ export default function Battle() {
           setTimeout(() => {
             setPhaseIndex(nextIdx);
             const newExState = createExerciseState(nextPhase.exercise);
-            // Carry over calibration data so user doesn't re-calibrate
             newExState.calibrated = true;
             newExState.bodyDetected = true;
             newExState.calibrationProgress = 100;
@@ -82,7 +74,6 @@ export default function Battle() {
             newExState._standingHipY = exerciseStateRef.current._standingHipY;
             newExState._squatHipY = exerciseStateRef.current._squatHipY;
             newExState._threshold = exerciseStateRef.current._threshold;
-            newExState._squatDropRatio = exerciseStateRef.current._squatDropRatio;
             exerciseStateRef.current = newExState;
             prevRepRef.current = 0;
             setDisplayState({ ...newExState });
@@ -96,13 +87,10 @@ export default function Battle() {
     return () => clearInterval(interval);
   }, [gameActive, sessionOver, workoutComplete, phaseIndex]);
 
-  // End session when workout complete
   useEffect(() => {
     if (workoutComplete && !sessionOver) handleEndSession();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workoutComplete]);
 
-  // Combo streak timeout
   useEffect(() => {
     if (!gameActive || sessionOver) return;
     const interval = setInterval(() => {
@@ -115,24 +103,29 @@ export default function Battle() {
     return () => clearInterval(interval);
   }, [gameActive, sessionOver]);
 
-  // Pose detection → exercise state → rep counting
-  // IMPORTANT: uses gameActiveRef (not gameActive) to avoid stale-closure bug
-  // where first rep after calibration wouldn't trigger damage.
+  useEffect(() => {
+    if (!gameActive || sessionOver) return;
+    if (displayState.feedback === 'No body detected') {
+      setComboText(prev => (prev?.startsWith('x') ? prev : 'No body detected'));
+      return;
+    }
+    if (displayState.feedback === 'Tracking active') {
+      setComboText(prev => (prev?.startsWith('x') ? prev : 'Tracking active'));
+      return;
+    }
+    setComboText(prev => (prev === 'No body detected' || prev === 'Tracking active' ? null : prev));
+  }, [displayState.feedback, gameActive, sessionOver]);
+
   useEffect(() => {
     if (!landmarks || !started || sessionOver || workoutComplete) return;
-
     const newState = detectExercise(landmarks, exerciseStateRef.current);
     exerciseStateRef.current = newState;
     setDisplayState({ ...newState });
 
-    // Activate game as soon as calibration completes
-    if (newState.calibrated && !gameActiveRef.current) {
-      setGameActive(true);
-      gameActiveRef.current = true;
-    }
+    if (newState.calibrated && !gameActive) setGameActive(true);
 
-    // Count rep if repCount increased AND game is active (use ref to avoid stale closure)
-    if (newState.repCount > prevRepRef.current && gameActiveRef.current) {
+    const isActive = gameActive || newState.calibrated;
+    if (newState.repCount > prevRepRef.current && isActive) {
       prevRepRef.current = newState.repCount;
       lastRepTimeRef.current = Date.now();
 
@@ -162,10 +155,10 @@ export default function Battle() {
       setIsHit(true);
       setDamageText(`-${damage}`);
 
-      const exerciseEmoji = exType === 'squats' ? '🏋️' : exType === 'jumping_jacks' ? '⭐' : '🦵';
+      // Gamified bottom message
       const messages = [
-        `${exerciseEmoji} Rep ${newState.repCount}! -${damage} HP`,
         `💥 You dealt ${damage} damage!`,
+        `🔥 Squat registered! -${damage} HP`,
         `⚔️ Critical hit! ${damage} damage!`,
         `💪 Nice rep! Monster took ${damage}!`,
       ];
@@ -176,9 +169,8 @@ export default function Battle() {
 
       setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
     }
-  }, [landmarks, started, sessionOver, workoutComplete]);
+  }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
 
-  // Monster defeat reset
   useEffect(() => {
     if (monsterDefeated) {
       setTimeout(() => { setMonsterHP(MONSTER_MAX_HP); setMonsterDefeated(false); }, 1500);
@@ -204,7 +196,6 @@ export default function Battle() {
 
   useEffect(() => { handleStart(); }, [handleStart]);
 
-  // ── Session over screen ──
   if (sessionOver) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
@@ -227,110 +218,83 @@ export default function Battle() {
     );
   }
 
-  // ── Calibration screen ──
   if (started && !gameActive) {
     return (
-      <CalibrationScreen
-        stream={stream}
-        landmarks={landmarks}
-        feedback={displayState.feedback}
-        calibrationProgress={displayState.calibrationProgress}
-        formQuality={displayState.formQuality}
-        bodyDetected={displayState.bodyDetected}
-        isLoading={isLoading}
-        cameraActive={cameraActive}
-        cameraStatus={cameraStatus}
-        error={error}
-        onRetry={handleStart}
-      />
+      <>
+        <CalibrationScreen
+          stream={stream}
+          landmarks={landmarks}
+          feedback={displayState.feedback}
+          calibrationProgress={displayState.calibrationProgress}
+          formQuality={displayState.formQuality}
+          bodyDetected={displayState.bodyDetected}
+          isLoading={isLoading}
+          cameraActive={cameraActive}
+          cameraStatus={cameraStatus}
+          error={error}
+          onRetry={handleStart}
+        />
+      </>
     );
   }
 
   const hpPercent = Math.max(0, (monsterHP / MONSTER_MAX_HP) * 100);
 
-  // ── Main gameplay screen ──
-  // z-index layers:
-  //   z-0  background image
-  //   z-10 monster (centre)
-  //   z-20 damage/combo floating text
-  //   z-30 monster-defeated overlay
-  //   z-40 HUD (rep counter, HP bar, timer, bottom message)
-  //   z-50 phase transition overlay
-
   return (
     <div className="h-screen w-screen relative overflow-hidden">
-      {/* Background */}
-      <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover z-0" />
+      <img src={battleBgForest} alt="" className="absolute inset-0 w-full h-full object-cover" />
 
-      {/* Monster */}
-      <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
+      <div className="absolute top-3 left-3 z-50">
+        <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
+          REP:{String(displayState.repCount).padStart(3, '0')}
+        </span>
       </div>
 
-      {/* HP bar — above monster, always visible */}
-      <div className="absolute top-3 left-3 right-3 z-40">
+      <div className="absolute top-[11vh] left-1/2 -translate-x-1/2 z-40 w-[min(82vw,24rem)] px-2">
         <div className="flex items-center gap-2">
-          <span className="font-pixel text-xs text-foreground game-text-shadow shrink-0">HP</span>
-          <div className="flex-1 h-5 border-[3px] border-foreground bg-black">
+          <span className="font-pixel text-xs text-foreground game-text-shadow">HP</span>
+          <div className="flex-1 h-6 border-[3px] border-foreground bg-black">
             <div
               className={`h-full transition-all duration-300 ${hpPercent < 30 ? 'bg-hp-low' : 'bg-hp-bar'}`}
               style={{ width: `${hpPercent}%` }}
             />
           </div>
-          <span className="font-pixel text-[9px] text-foreground game-text-shadow shrink-0">
-            {Math.ceil(monsterHP)}/{MONSTER_MAX_HP}
-          </span>
         </div>
       </div>
 
-      {/* Rep counter — top left, below HP bar */}
-      <div className="absolute top-12 left-3 z-40">
-        <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
-          REP: <span className="text-primary">{String(displayState.repCount).padStart(3, '0')}</span>
-        </span>
+      <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
       </div>
 
-      {/* Timer — right side, vertically centred */}
-      <div
-        className="absolute right-3 z-40 text-right"
-        style={{ top: '50%', transform: 'translateY(-50%)' }}
-      >
-        <span className="font-pixel text-[10px] text-game-gold game-text-shadow block leading-tight">TIME</span>
-        <span className="font-pixel text-5xl text-game-gold game-text-shadow italic leading-none">{phaseTimeLeft}</span>
-      </div>
-
-      {/* Floating damage text */}
       {damageText && (
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-20 animate-bounce pointer-events-none">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-30 animate-bounce">
           <span className="font-pixel text-3xl text-destructive game-text-shadow drop-shadow-lg">{damageText}</span>
         </div>
       )}
 
-      {/* Combo text */}
       {comboText && (
-        <div className="absolute top-[42%] left-1/2 -translate-x-1/2 z-20 animate-bounce pointer-events-none">
+        <div className="absolute top-[40%] left-1/2 -translate-x-1/2 z-30 animate-bounce">
           <span className="font-pixel text-lg text-secondary game-text-shadow drop-shadow-lg">{comboText}</span>
         </div>
       )}
 
-      {/* Monster defeated overlay */}
       {monsterDefeated && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/40 pointer-events-none">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40">
           <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
         </div>
       )}
 
-      {/* Bottom feedback message — fixed above safe area, never overlapping timer */}
-      <div className="absolute bottom-4 left-3 z-40" style={{ right: '4.5rem' }}>
+      {/* Gamified bottom message */}
+      <div className="absolute bottom-16 left-4 right-20 z-40">
         <AnimatePresence>
           {gameMessage && (
             <motion.div
               key={gameMessage}
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25 }}
-              className="bg-black/75 backdrop-blur-sm rounded-lg px-3 py-2"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.3 }}
+              className="bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-center"
             >
               <span className="font-pixel text-[10px] text-primary game-text-shadow">{gameMessage}</span>
             </motion.div>
@@ -338,22 +302,11 @@ export default function Battle() {
         </AnimatePresence>
       </div>
 
-      {/* Exercise feedback — bottom centre, above game message */}
-      {displayState.feedback && displayState.feedback !== `Rep ${displayState.repCount}!` && (
-        <div className="absolute bottom-16 left-3 z-40 pointer-events-none" style={{ right: '4.5rem' }}>
-          <div className="bg-black/50 backdrop-blur-sm rounded-lg px-3 py-1.5 inline-block">
-            <span className={`font-body text-xs font-semibold game-text-shadow ${
-              displayState.formQuality === 'good' ? 'text-primary' :
-              displayState.formQuality === 'needs_work' ? 'text-yellow-400' :
-              'text-foreground'
-            }`}>
-              {displayState.feedback}
-            </span>
-          </div>
-        </div>
-      )}
+      <div className="absolute bottom-4 right-4 z-40 text-right">
+        <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
+        <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
+      </div>
 
-      {/* Phase transition overlay */}
       {phaseTransition && (
         <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
       )}
