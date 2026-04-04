@@ -139,8 +139,7 @@ export function CalibrationScreen({
     left: 0,
     width: '100%',
     height: '100%',
-    // contain: never crops the body — user always sees head to toe
-    objectFit: 'contain',
+    objectFit: 'cover',
     objectPosition: 'center center',
     transform: 'scaleX(-1)',
     transformOrigin: 'center center',
