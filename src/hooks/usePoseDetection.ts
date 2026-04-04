@@ -147,12 +147,23 @@ export function usePoseDetection() {
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
-          width: { ideal: 720 },
-          height: { ideal: 1280 },
+          width: { ideal: 720, min: 480 },
+          height: { ideal: 1280, min: 640 },
           aspectRatio: { ideal: 9 / 16 },
         },
         audio: false,
       });
+
+      const [videoTrack] = cameraStream.getVideoTracks();
+      if (videoTrack?.applyConstraints) {
+        try {
+          await videoTrack.applyConstraints({
+            width: { ideal: 720 },
+            height: { ideal: 1280 },
+            aspectRatio: { ideal: 9 / 16 },
+          });
+        } catch {}
+      }
 
       streamRef.current = cameraStream;
       setStream(cameraStream);
