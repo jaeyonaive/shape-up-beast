@@ -46,13 +46,33 @@ export function CalibrationScreen({
     const attachStream = async () => {
       try {
         video.srcObject = stream;
+
+        // Wait for metadata before playing
+        if (video.readyState < 1) {
+          await new Promise<void>((resolve, reject) => {
+            const onMeta = () => { video.removeEventListener('loadedmetadata', onMeta); resolve(); };
+            video.addEventListener('loadedmetadata', onMeta);
+            setTimeout(() => { video.removeEventListener('loadedmetadata', onMeta); reject(new Error('metadata timeout')); }, 5000);
+          });
+        }
+
         await video.play();
-        if (!cancelled && video.readyState >= 2) {
+        if (!cancelled) {
           setVideoReady(true);
+          console.log('[Calibration] Video playing:', video.videoWidth, 'x', video.videoHeight);
         }
       } catch (attachError) {
         console.error('[Calibration] Preview attach failed:', attachError);
-        if (!cancelled) setVideoReady(false);
+        // Retry once with muted (autoplay policy)
+        if (!cancelled) {
+          try {
+            video.muted = true;
+            await video.play();
+            setVideoReady(true);
+          } catch {
+            setVideoReady(false);
+          }
+        }
       }
     };
 
@@ -119,8 +139,7 @@ export function CalibrationScreen({
     left: 0,
     width: '100%',
     height: '100%',
-    // contain: never crops the body — user always sees head to toe
-    objectFit: 'contain',
+    objectFit: 'cover',
     objectPosition: 'center center',
     transform: 'scaleX(-1)',
     transformOrigin: 'center center',
