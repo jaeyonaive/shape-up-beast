@@ -31,7 +31,6 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
-  const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     const video = videoRef.current;
@@ -48,9 +47,6 @@ export function CalibrationScreen({
         await video.play();
         if (!cancelled) {
           setVideoReady(video.readyState >= 2);
-          if (video.videoWidth && video.videoHeight) {
-            setVideoDimensions({ width: video.videoWidth, height: video.videoHeight });
-          }
         }
       } catch (attachError) {
         console.error('[Fitnasia] Calibration preview failed:', attachError);
@@ -74,11 +70,6 @@ export function CalibrationScreen({
     const updateMetrics = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       setVideoReady(video.readyState >= 2);
-      const newW = video.videoWidth;
-      const newH = video.videoHeight;
-      if (newW !== videoDimensions.width || newH !== videoDimensions.height) {
-        setVideoDimensions({ width: newW, height: newH });
-      }
     };
 
     video.addEventListener('loadedmetadata', updateMetrics);
@@ -94,14 +85,15 @@ export function CalibrationScreen({
       window.removeEventListener('resize', updateMetrics);
       clearInterval(interval);
     };
-  }, [stream, videoDimensions.width, videoDimensions.height]);
+  }, [stream]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !videoDimensions.width || !videoDimensions.height) return;
+    const video = videoRef.current;
+    if (!canvas || !video || !video.videoWidth || !video.videoHeight) return;
 
-    canvas.width = videoDimensions.width;
-    canvas.height = videoDimensions.height;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -110,25 +102,20 @@ export function CalibrationScreen({
     if (landmarks) {
       drawPose(ctx, landmarks, canvas.width, canvas.height);
     }
-  }, [landmarks, videoDimensions]);
-
-  const shouldRotateToPortrait =
-    videoDimensions.width > videoDimensions.height &&
-    typeof window !== 'undefined' &&
-    window.innerHeight > window.innerWidth;
+  }, [landmarks, videoReady]);
 
   const sharedMediaStyle: CSSProperties = {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    width: shouldRotateToPortrait ? '100dvh' : '100dvw',
-    height: shouldRotateToPortrait ? '100dvw' : '100dvh',
+    width: '100vw',
+    height: '100vh',
     objectFit: 'contain',
     objectPosition: 'center center',
-    transform: shouldRotateToPortrait
-      ? 'translate(-50%, -50%) rotate(90deg) scaleX(-1)'
-      : 'translate(-50%, -50%) scaleX(-1)',
+    transform: 'translate(-50%, -50%) scaleX(-1)',
     transformOrigin: 'center center',
+    maxWidth: 'none',
+    maxHeight: 'none',
     background: 'transparent',
   };
 
@@ -150,8 +137,8 @@ export function CalibrationScreen({
           position: 'fixed',
           top: 0,
           left: 0,
-          width: '100dvw',
-          height: '100dvh',
+          width: '100vw',
+          height: '100vh',
           overflow: 'hidden',
           zIndex: 50,
           background: 'hsl(0 0% 0%)',
@@ -178,8 +165,8 @@ export function CalibrationScreen({
           position: 'fixed',
           top: 0,
           left: 0,
-          width: '100dvw',
-          height: '100dvh',
+          width: '100vw',
+          height: '100vh',
           zIndex: 51,
           pointerEvents: 'none',
         }}
@@ -199,9 +186,6 @@ export function CalibrationScreen({
                 style={{ width: `${calibrationProgress}%` }}
               />
             </div>
-            <p className="font-pixel text-[8px] text-muted-foreground mt-1 tracking-wider">
-              {calibrationProgress}%
-            </p>
           </div>
         </div>
 
