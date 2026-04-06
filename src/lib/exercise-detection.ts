@@ -6,9 +6,9 @@ export type ExerciseType = 'squats' | 'jumping_jacks' | 'lunges';
 
 export type ExercisePhase =
   | 'waiting' | 'calibrating' | 'calibrating_squat'
-  | 'standing' | 'descending' | 'at_bottom' | 'ascending'  // squats
-  | 'closed' | 'opening' | 'open' | 'closing'              // jumping jacks
-  | 'lunge_standing' | 'lunge_down' | 'lunge_returning';    // lunges
+  | 'standing' | 'descending' | 'at_bottom' | 'ascending' | 'cooldown'  // squats
+  | 'closed' | 'opening' | 'open' | 'closing'                           // jumping jacks
+  | 'lunge_standing' | 'lunge_down' | 'lunge_returning';                 // lunges
 
 export interface ExerciseState {
   exerciseType: ExerciseType;
@@ -51,17 +51,18 @@ export interface ExerciseState {
 
 const BODY_DETECT_FRAMES = 5;
 const CALIBRATION_TIMEOUT_MS = 5000;
-const SMOOTHING_WINDOW = 5;
-const REP_COOLDOWN_MS = 800;
+const SMOOTHING_ALPHA = 0.4;  // EMA factor: higher = more responsive, less smooth
+const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
 const SQUAT_KNEE_ANGLE_THRESHOLD = 120;
 const SQUAT_STANDING_ANGLE = 160;
 const SQUAT_DEFAULT_DROP_RATIO = 0.22;
 const SQUAT_MIN_DROP_RATIO = 0.2;
 const SQUAT_MAX_DROP_RATIO = 0.25;
-const SQUAT_RETURN_RATIO = 0.04;
-const SQUAT_NOISE_Y = 0.035;
-const MIN_ABSOLUTE_HIP_DROP = 0.07;
+// Fraction of calibrated drop range that defines "deep enough" and "back to standing"
+const SQUAT_DOWN_FRACTION = 0.75;   // hips at 75% of calibrated depth → "down"
+const SQUAT_UP_FRACTION = 0.28;     // hips within 28% of standing → "back up"
+const MIN_CALIB_DROP = 0.06;        // minimum meaningful calibrated drop (safety guard)
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -171,12 +172,12 @@ function getBodyHeight(landmarks: Landmark[]): number {
   return Math.max(0, kneeY - shoulderY);
 }
 
+// EMA smoother: lower latency than median, still removes single-frame noise.
+// history stores only the last smoothed value [prevEMA].
 function smoothY(history: number[], newVal: number): { smoothed: number; history: number[] } {
-  const updated = [...history, newVal].slice(-SMOOTHING_WINDOW);
-  const sorted = [...updated].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  return { smoothed: median, history: updated };
+  const prev = history.length > 0 ? history[history.length - 1] : newVal;
+  const smoothed = prev + SMOOTHING_ALPHA * (newVal - prev);
+  return { smoothed, history: [smoothed] };
 }
 
 // ─── Jumping Jack helpers ────────────────────────────────────────────────────
@@ -361,76 +362,72 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   }
 }
 
-// ─── Squat Detection (hip-primary, knee-secondary fallback) ─────────────────
+// ─── Squat Detection — 3-state machine ──────────────────────────────────────
+//
+//  standing ──(hips reach downThreshold)──▶ at_bottom
+//  at_bottom ──(hips return to upThreshold)──▶ cooldown  (+1 rep)
+//  cooldown ──(REP_COOLDOWN_MS elapsed)──▶ standing
+//
+// Thresholds are fractions of the calibrated drop range so the system
+// automatically adapts to every body type and camera distance.
 
-function getAvgKneeAngle(landmarks: Landmark[]): number {
-  const leftAngle = calculateAngle(
-    landmarks[POSE.LEFT_HIP], landmarks[POSE.LEFT_KNEE], landmarks[POSE.LEFT_ANKLE]
-  );
-  const rightAngle = calculateAngle(
-    landmarks[POSE.RIGHT_HIP], landmarks[POSE.RIGHT_KNEE], landmarks[POSE.RIGHT_ANKLE]
-  );
-  if (leftAngle > 0 && rightAngle > 0) return (leftAngle + rightAngle) / 2;
-  return leftAngle > 0 ? leftAngle : rightAngle;
-}
+function detectSquatPhase(_landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
+  // Calibrated drop range; guard against a bad calibration producing near-zero range.
+  const calibDrop = Math.max(state._threshold - state._standingHipY, MIN_CALIB_DROP);
 
-function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
-  const kneesVis = hasKneesVisible(landmarks);
-  const kneeAngle = kneesVis ? getAvgKneeAngle(landmarks) : 999;
-  const bodyHeight = Math.max(getBodyHeight(landmarks), 0.001);
-  const prevHipY = state._hipYHistory[state._hipYHistory.length - 2] ?? smoothedHipY;
-  const hipVelocity = smoothedHipY - prevHipY;
-  const squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio || SQUAT_DEFAULT_DROP_RATIO));
+  // Enter "down" when hips have dropped 75% of the calibrated squat depth.
+  const downThreshold = state._standingHipY + calibDrop * SQUAT_DOWN_FRACTION;
+  // Count the rep when hips are back within 28% of calibrated drop above standing.
+  const upThreshold = state._standingHipY + calibDrop * SQUAT_UP_FRACTION;
 
-  const downThresholdY = state._standingHipY + bodyHeight * squatDropRatio;
-  const returnThresholdY = state._standingHipY + bodyHeight * SQUAT_RETURN_RATIO;
-  const startMoveY = state._standingHipY + bodyHeight * 0.12;
+  const phase = state.phase;
 
-  const deepByHip = smoothedHipY >= downThresholdY;
-  const deepByKnee = kneesVis && kneeAngle < SQUAT_KNEE_ANGLE_THRESHOLD;
-  const isDeepEnough = kneesVis ? (deepByHip && deepByKnee) : deepByHip;
+  // ── COOLDOWN: a rep was just counted — ignore all movement ───────────────
+  if (phase === 'cooldown') {
+    if (timeSinceRep >= REP_COOLDOWN_MS) {
+      state.phase = 'standing';
+      state.feedback = 'Keep going!';
+      state.formQuality = 'neutral';
+    }
+    // Stay in cooldown regardless of hip position — prevents double counting.
+    return state;
+  }
 
-  const absoluteHipDrop = smoothedHipY - state._standingHipY;
-  const hasMinDrop = absoluteHipDrop >= MIN_ABSOLUTE_HIP_DROP;
-
-  const movingDown = hipVelocity > SQUAT_NOISE_Y;
-  const backToStanding = smoothedHipY <= returnThresholdY;
-
-  // No baseline drift — standing position is locked after calibration
-
-  if (!state._reachedDepth) {
-    if (isDeepEnough && hasMinDrop) {
+  // ── STANDING: waiting for user to squat down ─────────────────────────────
+  if (phase === 'standing' || phase === 'descending' || phase === 'ascending') {
+    if (smoothedHipY >= downThreshold) {
+      // Hips low enough — entered the squat
       state.phase = 'at_bottom';
       state._reachedDepth = true;
-      state.feedback = 'Good depth! Stand up!';
+      state.feedback = 'Good depth! Come back up!';
       state.formQuality = 'good';
-      return state;
-    }
-
-    if (movingDown && smoothedHipY >= startMoveY) {
-      state.phase = 'descending';
-      state.feedback = 'Going down...';
     } else {
       state.phase = 'standing';
-      state.feedback = 'Tracking active';
+      state.feedback = 'Squat!';
+      state.formQuality = 'neutral';
     }
-    state.formQuality = 'neutral';
     return state;
   }
 
-  if (state._reachedDepth && backToStanding && timeSinceRep >= REP_COOLDOWN_MS) {
-    state.repCount += 1;
-    state._lastRepTime = now;
-    state._reachedDepth = false;
-    state.phase = 'standing';
-    state.feedback = `Rep ${state.repCount}!`;
-    state.formQuality = 'good';
+  // ── AT_BOTTOM ("down"): waiting for user to stand back up ────────────────
+  if (phase === 'at_bottom') {
+    if (smoothedHipY <= upThreshold) {
+      // Hips back near baseline — count the rep
+      state.repCount += 1;
+      state._lastRepTime = now;
+      state._reachedDepth = false;
+      state.phase = 'cooldown';
+      state.feedback = `Rep ${state.repCount}!`;
+      state.formQuality = 'good';
+    } else {
+      state.feedback = 'Stand back up!';
+      state.formQuality = 'good';
+    }
     return state;
   }
 
-  state.phase = 'ascending';
-  state.feedback = 'Come back up...';
-  state.formQuality = 'good';
+  // Fallback — should not normally be reached
+  state.phase = 'standing';
   return state;
 }
 

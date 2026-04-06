@@ -147,6 +147,7 @@ export function usePoseDetection() {
           facingMode: 'user',
           width: { ideal: 720 },
           height: { ideal: 1280 },
+          aspectRatio: { ideal: 9 / 16 },
         },
         audio: false,
       });
