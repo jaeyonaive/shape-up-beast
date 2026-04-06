@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, type CSSProperties } from 'react';
+import { useRef, useEffect, useState, useMemo, type CSSProperties } from 'react';
 import { Button } from '@/components/ui/button';
 import { type Landmark, drawPose } from '@/lib/pose-detection';
 
@@ -31,6 +31,8 @@ export function CalibrationScreen({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
+  const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
+  const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -70,6 +72,33 @@ export function CalibrationScreen({
     const updateMetrics = () => {
       if (!video.videoWidth || !video.videoHeight) return;
       setVideoReady(video.readyState >= 2);
+
+      const landscape = video.videoWidth > video.videoHeight;
+      setIsLandscapeVideo(landscape);
+
+      // Compute actual rendered video area so the canvas can align to it.
+      // When landscape video is rotated 90° via CSS the rendered dimensions swap,
+      // so we use the post-rotation virtual width/height for the calculation.
+      const vw = landscape ? video.videoHeight : video.videoWidth;
+      const vh = landscape ? video.videoWidth : video.videoHeight;
+      const containerW = window.innerWidth;
+      const containerH = window.innerHeight;
+      const videoAspect = vw / vh;
+      const containerAspect = containerW / containerH;
+
+      let renderW: number, renderH: number, offsetX: number, offsetY: number;
+      if (videoAspect > containerAspect) {
+        renderW = containerW;
+        renderH = containerW / videoAspect;
+        offsetX = 0;
+        offsetY = (containerH - renderH) / 2;
+      } else {
+        renderH = containerH;
+        renderW = containerH * videoAspect;
+        offsetX = (containerW - renderW) / 2;
+        offsetY = 0;
+      }
+      setVideoRect({ top: offsetY, left: offsetX, width: renderW, height: renderH });
     };
 
     video.addEventListener('loadedmetadata', updateMetrics);
@@ -104,20 +133,42 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoReady]);
 
-  const sharedMediaStyle: CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: '100vw',
-    height: '100vh',
-    objectFit: 'contain',
-    objectPosition: 'center center',
-    transform: 'translate(-50%, -50%) scaleX(-1)',
-    transformOrigin: 'center center',
-    maxWidth: 'none',
-    maxHeight: 'none',
-    background: 'transparent',
-  };
+  // Portrait video: fill viewport with contain (black bars acceptable — shows full body).
+  // Landscape video (device returned wrong orientation): rotate 90° so it appears portrait,
+  // swap the CSS width/height so the rotated video fills the screen correctly.
+  const videoStyle: CSSProperties = useMemo<CSSProperties>(() => {
+    if (isLandscapeVideo) {
+      return {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        // Swap dimensions so after a 90° rotation the video fills portrait screen.
+        width: '100vh',
+        height: '100vw',
+        objectFit: 'contain',
+        objectPosition: 'center center',
+        transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
+        transformOrigin: 'center center',
+        maxWidth: 'none',
+        maxHeight: 'none',
+        background: 'transparent',
+      };
+    }
+    return {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      width: '100vw',
+      height: '100vh',
+      objectFit: 'contain',
+      objectPosition: 'center center',
+      transform: 'translate(-50%, -50%) scaleX(-1)',
+      transformOrigin: 'center center',
+      maxWidth: 'none',
+      maxHeight: 'none',
+      background: 'transparent',
+    };
+  }, [isLandscapeVideo]);
 
   const cameraMessage = error
     ? 'Camera failed to start'
@@ -149,12 +200,17 @@ export function CalibrationScreen({
           autoPlay
           playsInline
           muted
-          style={sharedMediaStyle}
+          style={videoStyle}
         />
         <canvas
           ref={canvasRef}
           style={{
-            ...sharedMediaStyle,
+            position: 'absolute',
+            top: videoRect?.top ?? 0,
+            left: videoRect?.left ?? 0,
+            width: videoRect?.width ?? '100%',
+            height: videoRect?.height ?? '100%',
+            transform: 'scaleX(-1)',
             pointerEvents: 'none',
           }}
         />

@@ -1,4 +1,4 @@
-import { RefObject, useEffect, useState } from 'react';
+import { RefObject, useEffect, useState, useMemo } from 'react';
 
 interface CameraViewProps {
   videoRef: RefObject<HTMLVideoElement>;
@@ -7,6 +7,7 @@ interface CameraViewProps {
 
 export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -15,9 +16,15 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
     const updateRect = () => {
       if (!video.videoWidth || !video.videoHeight) return;
 
+      const landscape = video.videoWidth > video.videoHeight;
+      setIsLandscapeVideo(landscape);
+
+      // Use post-rotation dimensions for rect calculation when video is landscape
+      const vw = landscape ? video.videoHeight : video.videoWidth;
+      const vh = landscape ? video.videoWidth : video.videoHeight;
       const containerW = video.clientWidth;
       const containerH = video.clientHeight;
-      const videoAspect = video.videoWidth / video.videoHeight;
+      const videoAspect = vw / vh;
       const containerAspect = containerW / containerH;
 
       let renderW: number, renderH: number, offsetX: number, offsetY: number;
@@ -53,15 +60,34 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
     };
   }, [videoRef]);
 
+  // If camera returns landscape video, rotate it so it displays portrait.
+  const videoStyle = useMemo(() => {
+    if (isLandscapeVideo) {
+      return {
+        position: 'absolute' as const,
+        top: '50%',
+        left: '50%',
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain' as const,
+        transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
+        transformOrigin: 'center center',
+        maxWidth: 'none',
+        maxHeight: 'none',
+      };
+    }
+    return { transform: 'scaleX(-1)' };
+  }, [isLandscapeVideo]);
+
   return (
     <div className="absolute inset-0 z-0 bg-black">
       <video
         ref={videoRef}
-        className="w-full h-full object-contain mirror"
+        className={isLandscapeVideo ? 'bg-black' : 'w-full h-full object-contain'}
         autoPlay
         playsInline
         muted
-        style={{ transform: 'scaleX(-1)' }}
+        style={videoStyle}
       />
       <canvas
         ref={canvasRef}

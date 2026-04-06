@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { type Landmark, drawPose } from '@/lib/pose-detection';
 
 interface CameraOverlayProps {
@@ -10,6 +10,7 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
 
   // Attach stream to video element
   useEffect(() => {
@@ -30,9 +31,15 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
     const updateRect = () => {
       if (!video.videoWidth || !video.videoHeight) return;
 
+      const landscape = video.videoWidth > video.videoHeight;
+      setIsLandscapeVideo(landscape);
+
+      // Use post-rotation dimensions for rect calculation when video is landscape
+      const vw = landscape ? video.videoHeight : video.videoWidth;
+      const vh = landscape ? video.videoWidth : video.videoHeight;
       const containerW = video.clientWidth;
       const containerH = video.clientHeight;
-      const videoAspect = video.videoWidth / video.videoHeight;
+      const videoAspect = vw / vh;
       const containerAspect = containerW / containerH;
 
       let renderW: number;
@@ -82,17 +89,37 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
     drawPose(ctx, landmarks, canvas.width, canvas.height);
   }, [landmarks]);
 
+  // If camera returns landscape video, rotate it -90° so it displays portrait.
+  // Swap width/height in CSS so the rotated video fills the container correctly.
+  const videoStyle = useMemo(() => {
+    if (isLandscapeVideo) {
+      return {
+        position: 'absolute' as const,
+        top: '50%',
+        left: '50%',
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain' as const,
+        transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
+        transformOrigin: 'center center',
+        maxWidth: 'none',
+        maxHeight: 'none',
+      };
+    }
+    return { transform: 'scaleX(-1)' };
+  }, [isLandscapeVideo]);
+
   if (!stream) return null;
 
   return (
     <div className="relative w-full h-full overflow-hidden rounded-xl bg-black">
       <video
         ref={videoRef}
-        className="w-full h-full object-contain bg-black"
+        className={isLandscapeVideo ? 'bg-black' : 'w-full h-full object-contain bg-black'}
         autoPlay
         playsInline
         muted
-        style={{ transform: 'scaleX(-1)' }}
+        style={videoStyle}
       />
       <canvas
         ref={canvasRef}
