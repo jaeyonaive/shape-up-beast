@@ -6,7 +6,7 @@ import monsterTutorial from '@/assets/monster-tutorial.png';
 const STEPS = [
   {
     title: 'Welcome, Fighter!',
-    body: 'FitMon uses your phone camera to track your exercises. Each correct rep damages the monster!',
+    body: 'Fitnasia uses your phone camera to track your exercises. Each correct rep damages the monster!',
     icon: '⚔️',
   },
   {
