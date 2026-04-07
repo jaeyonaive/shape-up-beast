@@ -93,15 +93,14 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
   // Landscape video: swap CSS width/height before rotating so the visual box
   // fills the portrait container correctly after the 90° turn.
   const videoStyle = useMemo(() => {
-    if (isLandscapeVideo && containerSize) {
+    if (isLandscapeVideo) {
       return {
         position: 'absolute' as const,
         top: '50%',
         left: '50%',
-        width: `${containerSize.h}px`,
-        height: `${containerSize.w}px`,
-        objectFit: 'contain' as const,
-        objectPosition: 'center center',
+        width: '100vh',   // becomes visual height after -90° rotation
+        height: '100vw',  // becomes visual width after -90° rotation
+        objectFit: 'cover' as const,
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',
@@ -115,7 +114,7 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
       objectPosition: 'center center',
       transform: 'scaleX(-1)',
     };
-  }, [isLandscapeVideo, containerSize]);
+  }, [isLandscapeVideo]);
 
   if (!stream) return null;
 

@@ -67,16 +67,18 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
   // Landscape video (fallback): swap CSS width/height before rotating 90° so that
   // after the rotation the visual box exactly fills the portrait container.
   const videoStyle = useMemo(() => {
-    if (isLandscapeVideo && containerSize) {
+    if (isLandscapeVideo) {
+      // Landscape frame displayed in portrait container:
+      // Swap viewport dimensions so the element is physically taller than wide,
+      // then rotate -90° to make it fill the portrait viewport correctly.
+      // scaleX(-1) mirrors (selfie cam flip).
       return {
         position: 'absolute' as const,
         top: '50%',
         left: '50%',
-        // CSS width becomes visual height after rotation, and vice-versa.
-        width: `${containerSize.h}px`,
-        height: `${containerSize.w}px`,
-        objectFit: 'contain' as const,
-        objectPosition: 'center center',
+        width: '100vh',   // becomes visual height after -90° rotation
+        height: '100vw',  // becomes visual width after -90° rotation
+        objectFit: 'cover' as const,
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',
@@ -90,7 +92,7 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
       objectPosition: 'center center',
       transform: 'scaleX(-1)',
     };
-  }, [isLandscapeVideo, containerSize]);
+  }, [isLandscapeVideo]);
 
   return (
     <div ref={containerRef} className="absolute inset-0 z-0 bg-black">
