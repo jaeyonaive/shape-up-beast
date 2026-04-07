@@ -32,135 +32,143 @@ export function CalibrationScreen({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoReady, setVideoReady] = useState(false);
   const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
-  const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
 
+  // ── Step 1: Detect landscape orientation from track settings immediately ──
+  // MediaStreamTrack.getSettings() is available as soon as the stream exists,
+  // unlike video.videoWidth which can return 0 indefinitely on iOS Safari.
+  useEffect(() => {
+    if (!stream) {
+      setIsLandscapeVideo(false);
+      return;
+    }
+    const track = stream.getVideoTracks()[0];
+    if (track) {
+      const settings = track.getSettings();
+      if (settings.width && settings.height) {
+        const landscape = settings.width > settings.height;
+        console.log(`[Calibration] Track: ${settings.width}x${settings.height} → ${landscape ? 'landscape' : 'portrait'}`);
+        setIsLandscapeVideo(landscape);
+      } else {
+        // iOS sometimes omits dimensions from getSettings() — fall back to screen
+        // orientation: if the phone is portrait the camera delivers landscape frames.
+        const phoneIsPortrait = window.innerWidth < window.innerHeight;
+        console.log(`[Calibration] No track dimensions; screen portrait=${phoneIsPortrait}`);
+        setIsLandscapeVideo(phoneIsPortrait);
+      }
+    }
+  }, [stream]);
+
+  // ── Step 2: Attach stream to the (hidden) video element ──
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) {
       setVideoReady(false);
       return;
     }
-
     let cancelled = false;
-
-    const attachStream = async () => {
+    const attach = async () => {
       try {
         video.srcObject = stream;
         await video.play();
-        if (!cancelled) {
-          setVideoReady(video.readyState >= 2);
-        }
-      } catch (attachError) {
-        console.error('[Fitnasia] Calibration preview failed:', attachError);
+        if (!cancelled) setVideoReady(video.readyState >= 2);
+      } catch (e) {
+        console.error('[Calibration] Video attach failed:', e);
         if (!cancelled) setVideoReady(false);
       }
     };
+    attach();
 
-    attachStream();
+    // Confirm readiness when video starts decoding (belt-and-suspenders for iOS)
+    const onReady = () => { if (!cancelled) setVideoReady(true); };
+    video.addEventListener('canplay', onReady);
+    // Also re-confirm landscape detection once video dimensions are available
+    const onMeta = () => {
+      if (cancelled || !video.videoWidth || !video.videoHeight) return;
+      const landscape = video.videoWidth > video.videoHeight;
+      setIsLandscapeVideo(landscape);
+    };
+    video.addEventListener('loadedmetadata', onMeta);
 
     return () => {
       cancelled = true;
+      video.removeEventListener('canplay', onReady);
+      video.removeEventListener('loadedmetadata', onMeta);
       video.srcObject = null;
       setVideoReady(false);
     };
   }, [stream]);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const updateMetrics = () => {
-      if (!video.videoWidth || !video.videoHeight) return;
-      setVideoReady(video.readyState >= 2);
-
-      const landscape = video.videoWidth > video.videoHeight;
-      setIsLandscapeVideo(landscape);
-
-      // Compute actual rendered video area so the canvas can align to it.
-      // When landscape video is rotated 90° via CSS the rendered dimensions swap,
-      // so we use the post-rotation virtual width/height for the calculation.
-      const vw = landscape ? video.videoHeight : video.videoWidth;
-      const vh = landscape ? video.videoWidth : video.videoHeight;
-      const containerW = window.innerWidth;
-      const containerH = window.innerHeight;
-      const videoAspect = vw / vh;
-      const containerAspect = containerW / containerH;
-
-      let renderW: number, renderH: number, offsetX: number, offsetY: number;
-      if (videoAspect > containerAspect) {
-        renderW = containerW;
-        renderH = containerW / videoAspect;
-        offsetX = 0;
-        offsetY = (containerH - renderH) / 2;
-      } else {
-        renderH = containerH;
-        renderW = containerH * videoAspect;
-        offsetX = (containerW - renderW) / 2;
-        offsetY = 0;
-      }
-      setVideoRect({ top: offsetY, left: offsetX, width: renderW, height: renderH });
-    };
-
-    video.addEventListener('loadedmetadata', updateMetrics);
-    video.addEventListener('canplay', updateMetrics);
-    video.addEventListener('resize', updateMetrics);
-    window.addEventListener('resize', updateMetrics);
-    const interval = setInterval(updateMetrics, 300);
-
-    return () => {
-      video.removeEventListener('loadedmetadata', updateMetrics);
-      video.removeEventListener('canplay', updateMetrics);
-      video.removeEventListener('resize', updateMetrics);
-      window.removeEventListener('resize', updateMetrics);
-      clearInterval(interval);
-    };
-  }, [stream]);
-
+  // ── Step 3: Draw skeleton overlay canvas ──
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video || !video.videoWidth || !video.videoHeight) return;
+    if (!canvas) return;
 
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Size canvas to video dimensions (or sensible defaults while loading)
+    const vw = video?.videoWidth || 640;
+    const vh = video?.videoHeight || 480;
+    canvas.width = vw;
+    canvas.height = vh;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, vw, vh);
     if (landmarks) {
-      drawPose(ctx, landmarks, canvas.width, canvas.height);
+      drawPose(ctx, landmarks, vw, vh);
     }
   }, [landmarks, videoReady]);
 
-  // Portrait video (normal): fill the fixed full-screen container with contain + mirror.
-  // Landscape video (fallback): CSS width/height are swapped before a 90° rotation so
-  // that after the turn the visual box fills the portrait viewport exactly.
-  const videoStyle: CSSProperties = useMemo<CSSProperties>(() => {
-    if (isLandscapeVideo) {
-      return {
+  // ── Video + canvas style ──
+  // Landscape video (iOS): pre-rotate element so CSS width becomes visual height.
+  //   width: 100vh (becomes visual height after -90° rotation)
+  //   height: 100vw (becomes visual width after -90° rotation)
+  //   objectFit: cover — fills the portrait screen without black bars
+  //   scaleX(-1) — mirrors for selfie
+  //
+  // Portrait video (desktop / explicit portrait stream): simple mirror.
+  const rotatedStyle: CSSProperties = useMemo(() => ({
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: '100vh',
+    height: '100vw',
+    objectFit: 'cover',
+    transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
+    transformOrigin: 'center center',
+    maxWidth: 'none',
+    maxHeight: 'none',
+  }), []);
+
+  const portraitStyle: CSSProperties = useMemo(() => ({
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+    transform: 'scaleX(-1)',
+  }), []);
+
+  const videoStyle = isLandscapeVideo ? rotatedStyle : portraitStyle;
+  // Canvas uses the same transform so the skeleton overlay aligns with the video
+  const canvasStyle: CSSProperties = isLandscapeVideo
+    ? {
         position: 'absolute',
         top: '50%',
         left: '50%',
-        // CSS width becomes visual height after rotation, and vice-versa.
         width: '100vh',
         height: '100vw',
-        objectFit: 'contain',
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',
         maxHeight: 'none',
-        background: 'transparent',
+        pointerEvents: 'none',
+      }
+    : {
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        transform: 'scaleX(-1)',
+        pointerEvents: 'none',
       };
-    }
-    return {
-      width: '100%',
-      height: '100%',
-      objectFit: 'contain',
-      objectPosition: 'center center',
-      transform: 'scaleX(-1)',
-    };
-  }, [isLandscapeVideo]);
 
   const cameraMessage = error
     ? 'Camera failed to start'
@@ -171,10 +179,13 @@ export function CalibrationScreen({
         : 'Camera starting…';
 
   const bodyMessage = bodyDetected ? 'Body detected' : 'Body not detected';
-  const showLoading = !error && !videoReady && (isLoading || cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera');
+  const showLoading = !error && !videoReady && (
+    isLoading || cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera'
+  );
 
   return (
     <>
+      {/* Camera layer */}
       <div
         style={{
           position: 'fixed',
@@ -184,7 +195,7 @@ export function CalibrationScreen({
           height: '100vh',
           overflow: 'hidden',
           zIndex: 50,
-          background: 'hsl(0 0% 0%)',
+          background: '#000',
         }}
       >
         <video
@@ -196,18 +207,11 @@ export function CalibrationScreen({
         />
         <canvas
           ref={canvasRef}
-          style={{
-            position: 'absolute',
-            top: videoRect?.top ?? 0,
-            left: videoRect?.left ?? 0,
-            width: videoRect?.width ?? '100%',
-            height: videoRect?.height ?? '100%',
-            transform: 'scaleX(-1)',
-            pointerEvents: 'none',
-          }}
+          style={canvasStyle}
         />
       </div>
 
+      {/* HUD layer */}
       <div
         style={{
           position: 'fixed',
@@ -238,7 +242,10 @@ export function CalibrationScreen({
         </div>
 
         {showLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/40" style={{ pointerEvents: 'auto' }}>
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-black/40"
+            style={{ pointerEvents: 'auto' }}
+          >
             <div className="text-center px-4">
               <div className="text-4xl mb-4 animate-spin">⏳</div>
               <p className="font-pixel text-xs text-foreground">{cameraMessage}</p>
@@ -247,7 +254,10 @@ export function CalibrationScreen({
         )}
 
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70" style={{ pointerEvents: 'auto' }}>
+          <div
+            className="absolute inset-0 flex items-center justify-center bg-black/70"
+            style={{ pointerEvents: 'auto' }}
+          >
             <div className="text-center px-4 max-w-xs">
               <div className="text-4xl mb-4">❌</div>
               <p className="font-pixel text-xs text-destructive mb-2">Camera access required</p>
