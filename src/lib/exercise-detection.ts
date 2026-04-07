@@ -49,10 +49,10 @@ export interface ExerciseState {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 5;
-const CALIBRATION_TIMEOUT_MS = 5000;
-const SMOOTHING_ALPHA = 0.4;  // EMA factor: higher = more responsive, less smooth
-const REP_COOLDOWN_MS = 500;
+const BODY_DETECT_FRAMES = 8;           // more frames required before calibration starts
+const CALIBRATION_TIMEOUT_MS = 6000;
+const SMOOTHING_ALPHA = 0.25;  // lower = smoother, filters clothing jitter
+const REP_COOLDOWN_MS = 600;
 const MAX_OCCLUSION_FRAMES = 20;
 const SQUAT_KNEE_ANGLE_THRESHOLD = 120;
 const SQUAT_STANDING_ANGLE = 160;
@@ -60,9 +60,9 @@ const SQUAT_DEFAULT_DROP_RATIO = 0.22;
 const SQUAT_MIN_DROP_RATIO = 0.2;
 const SQUAT_MAX_DROP_RATIO = 0.25;
 // Fraction of calibrated drop range that defines "deep enough" and "back to standing"
-const SQUAT_DOWN_FRACTION = 0.75;   // hips at 75% of calibrated depth → "down"
-const SQUAT_UP_FRACTION = 0.28;     // hips within 28% of standing → "back up"
-const MIN_CALIB_DROP = 0.06;        // minimum meaningful calibrated drop (safety guard)
+const SQUAT_DOWN_FRACTION = 0.65;   // hips at 65% of calibrated depth → "down" (easier to reach)
+const SQUAT_UP_FRACTION = 0.30;     // hips within 30% of standing → "back up"
+const MIN_CALIB_DROP = 0.05;        // minimum meaningful calibrated drop (safety guard)
 
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
@@ -164,7 +164,8 @@ function hasFullBody(landmarks: Landmark[]): boolean {
     POSE.LEFT_KNEE, POSE.RIGHT_KNEE,
   ];
 
-  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.3)) {
+  // 0.4 threshold filters out false positives from loose clothing
+  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.4)) {
     return false;
   }
 
@@ -257,6 +258,31 @@ function detectLungeSide(landmarks: Landmark[]): 'left' | 'right' | null {
   const rKnee = landmarks[POSE.RIGHT_KNEE];
   if (!lKnee || !rKnee) return null;
   return lKnee.y > rKnee.y ? 'left' : 'right';
+}
+
+function hasKneesVisible(landmarks: Landmark[]): boolean {
+  return !!(
+    landmarks[POSE.LEFT_KNEE] && landmarks[POSE.RIGHT_KNEE] &&
+    (landmarks[POSE.LEFT_KNEE].visibility ?? 0) > 0.3 &&
+    (landmarks[POSE.RIGHT_KNEE].visibility ?? 0) > 0.3
+  );
+}
+
+// Returns a framing guidance message if the body isn't well-framed, or null if OK.
+function getFramingGuidance(landmarks: Landmark[]): string | null {
+  const vis = (idx: number): number => landmarks[idx]?.visibility ?? 0;
+
+  const shouldersVis = vis(POSE.LEFT_SHOULDER) > 0.3 || vis(POSE.RIGHT_SHOULDER) > 0.3;
+  const hipsVis = vis(POSE.LEFT_HIP) > 0.3 || vis(POSE.RIGHT_HIP) > 0.3;
+  const kneesVis = vis(POSE.LEFT_KNEE) > 0.3 || vis(POSE.RIGHT_KNEE) > 0.3;
+  const anklesVis = vis(POSE.LEFT_ANKLE) > 0.2 || vis(POSE.RIGHT_ANKLE) > 0.2;
+
+  if (!shouldersVis) return 'Step back — too close!';
+  if (!hipsVis) return 'Show your full body';
+  if (!kneesVis) return 'Step back to show knees';
+  if (!anklesVis) return 'Step back a little more';
+
+  return null;
 }
 
 // ─── Main Detection ──────────────────────────────────────────────────────────

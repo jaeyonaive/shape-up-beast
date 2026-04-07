@@ -145,7 +145,7 @@ export function CalibrationScreen({
         // CSS width becomes visual height after rotation, and vice-versa.
         width: '100vh',
         height: '100vw',
-        objectFit: 'cover',
+        objectFit: 'contain',
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',

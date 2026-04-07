@@ -100,7 +100,7 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
         left: '50%',
         width: '100vh',   // becomes visual height after -90° rotation
         height: '100vw',  // becomes visual width after -90° rotation
-        objectFit: 'cover' as const,
+        objectFit: 'contain' as const,
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',
