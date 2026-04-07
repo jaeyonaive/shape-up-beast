@@ -164,8 +164,9 @@ function hasFullBody(landmarks: Landmark[]): boolean {
     POSE.LEFT_KNEE, POSE.RIGHT_KNEE,
   ];
 
-  // 0.4 threshold filters out false positives from loose clothing
-  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.4)) {
+  // 0.35: low enough to work in variable mobile lighting, high enough to
+  // reject clothing / partial occlusions that MediaPipe tracks with low confidence
+  if (!required.every(idx => landmarks[idx] && (landmarks[idx].visibility ?? 0) > 0.35)) {
     return false;
   }
 
@@ -219,8 +220,18 @@ function getArmSpread(landmarks: Landmark[]): number {
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
   if (!lWrist || !rWrist || !lShoulder || !rShoulder || !lElbow || !rElbow) return 0;
 
-  const lUp = lWrist.y < lShoulder.y || lElbow.y < lShoulder.y;
-  const rUp = rWrist.y < rShoulder.y || rElbow.y < rShoulder.y;
+  // Use the axis-aware vertical coord so this works for both portrait and
+  // landscape camera frames (on mobile the frame is landscape, so vertical
+  // position is encoded in .x, not .y).
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
+  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
+  // "above shoulder" means smaller value on the head side, larger on feet side.
+  // headIsAtLowValue=true → smaller coord = higher up → wrist is up if vc(wrist) < vc(shoulder)
+  const isAbove = (wrist: { x: number; y: number }, shoulder: { x: number; y: number }) =>
+    headIsAtLowValue ? vc(wrist) < vc(shoulder) : vc(wrist) > vc(shoulder);
+
+  const lUp = isAbove(lWrist, lShoulder) || isAbove(lElbow, lShoulder);
+  const rUp = isAbove(rWrist, rShoulder) || isAbove(rElbow, rShoulder);
   return (lUp ? 1 : 0) + (rUp ? 1 : 0);
 }
 
@@ -257,7 +268,13 @@ function detectLungeSide(landmarks: Landmark[]): 'left' | 'right' | null {
   const lKnee = landmarks[POSE.LEFT_KNEE];
   const rKnee = landmarks[POSE.RIGHT_KNEE];
   if (!lKnee || !rKnee) return null;
-  return lKnee.y > rKnee.y ? 'left' : 'right';
+  // Use the orientation-aware vertical coordinate (knee that is lower down = lunge leg)
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
+  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
+  // Lower down = larger value when headIsAtLowValue, smaller when !headIsAtLowValue
+  return headIsAtLowValue
+    ? (vc(lKnee) > vc(rKnee) ? 'left' : 'right')
+    : (vc(lKnee) < vc(rKnee) ? 'left' : 'right');
 }
 
 function hasKneesVisible(landmarks: Landmark[]): boolean {

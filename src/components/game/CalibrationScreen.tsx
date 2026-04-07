@@ -99,15 +99,23 @@ export function CalibrationScreen({
   }, [stream]);
 
   // ── Step 3: Draw skeleton overlay canvas ──
+  // Use track settings for dimensions when the display video hasn't decoded yet.
+  // This ensures the canvas matches the actual video resolution from frame 1.
   useEffect(() => {
     const canvas = canvasRef.current;
-    const video = videoRef.current;
     if (!canvas) return;
 
-    // Size canvas to video dimensions (or sensible defaults while loading)
-    const vw = video?.videoWidth || 640;
-    const vh = video?.videoHeight || 480;
-    canvas.width = vw;
+    // Prefer live video dimensions → track settings → safe defaults (in that order)
+    const video = videoRef.current;
+    const settings = stream?.getVideoTracks()[0]?.getSettings();
+    const vw = (video?.videoWidth  > 0 ? video.videoWidth  : null)
+            ?? settings?.width
+            ?? 640;
+    const vh = (video?.videoHeight > 0 ? video.videoHeight : null)
+            ?? settings?.height
+            ?? 480;
+
+    canvas.width  = vw;
     canvas.height = vh;
 
     const ctx = canvas.getContext('2d');
@@ -116,7 +124,7 @@ export function CalibrationScreen({
     if (landmarks) {
       drawPose(ctx, landmarks, vw, vh);
     }
-  }, [landmarks, videoReady]);
+  }, [landmarks, videoReady, stream]);
 
   // ── Video + canvas style ──
   // Landscape video (iOS): pre-rotate element so CSS width becomes visual height.
