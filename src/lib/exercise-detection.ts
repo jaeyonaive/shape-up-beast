@@ -160,6 +160,24 @@ export function hasKneesVisible(landmarks: Landmark[]): boolean {
   return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.25 && (rKnee.visibility ?? 0) > 0.25);
 }
 
+// Returns a framing guidance message when the camera view is too zoomed in,
+// or null when head and feet are both visible.
+function getFramingGuidance(landmarks: Landmark[]): string | null {
+  const nose = landmarks[POSE.NOSE];
+  const lAnkle = landmarks[POSE.LEFT_ANKLE];
+  const rAnkle = landmarks[POSE.RIGHT_ANKLE];
+
+  const headVisible = !!(nose && (nose.visibility ?? 0) > 0.3);
+  const anklesVisible =
+    !!(lAnkle && (lAnkle.visibility ?? 0) > 0.3) ||
+    !!(rAnkle && (rAnkle.visibility ?? 0) > 0.3);
+
+  if (!anklesVisible && !headVisible) return 'Step back — full body not visible';
+  if (!anklesVisible) return 'Step back — feet not in frame';
+  if (!headVisible) return 'Step back — head not in frame';
+  return null;
+}
+
 function getBodyHeight(landmarks: Landmark[]): number {
   const lShoulder = landmarks[POSE.LEFT_SHOULDER];
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
@@ -238,12 +256,13 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
   const now = Date.now();
   const kneesVis = hasKneesVisible(landmarks);
 
-  // Body visibility check
+  // Body visibility check — give specific framing guidance when possible
   if (!hasFullBody(landmarks)) {
     const occ = prevState._occludedFrames + 1;
+    const framingMsg = getFramingGuidance(landmarks) ?? 'Move into frame';
     return {
       ...prevState,
-      feedback: 'No body detected',
+      feedback: framingMsg,
       formQuality: 'neutral',
       bodyDetected: false,
       kneesVisible: kneesVis,
@@ -269,6 +288,17 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
   // ═══ WAITING: detect body ═══
   if (prevState.phase === 'waiting') {
+    // Require full framing (head + ankles visible) before counting detect frames.
+    const framingIssue = getFramingGuidance(landmarks);
+    if (framingIssue) {
+      return {
+        ...state,
+        feedback: framingIssue,
+        calibrationProgress: 0,
+        _bodyDetectFrames: 0,
+      };
+    }
+
     const frames = (prevState._bodyDetectFrames || 0) + 1;
     state._bodyDetectFrames = frames;
     if (frames >= BODY_DETECT_FRAMES) {
@@ -288,6 +318,12 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
   // ═══ CALIBRATING: capture standing position, then ask for one squat ═══
   if (prevState.phase === 'calibrating') {
+    // Pause calibration if framing is lost — ankles and head must stay visible
+    const framingIssue = getFramingGuidance(landmarks);
+    if (framingIssue) {
+      return { ...state, feedback: framingIssue, formQuality: 'neutral' };
+    }
+
     const elapsed = now - prevState._calibStartTime;
 
     // Record standing hip Y for 1.5 seconds

@@ -145,9 +145,9 @@ export function usePoseDetection() {
       const cameraStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'user',
-          width: { ideal: 720 },
-          height: { ideal: 1280 },
-          aspectRatio: { ideal: 9 / 16 },
+          width: { ideal: 480 },
+          height: { ideal: 640 },
+          aspectRatio: { ideal: 3 / 4 },
         },
         audio: false,
       });
