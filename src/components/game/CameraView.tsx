@@ -1,4 +1,4 @@
-import { RefObject, useEffect, useState, useMemo } from 'react';
+import { RefObject, useEffect, useRef, useState, useMemo } from 'react';
 
 interface CameraViewProps {
   videoRef: RefObject<HTMLVideoElement>;
@@ -6,8 +6,10 @@ interface CameraViewProps {
 }
 
 export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -19,24 +21,26 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
       const landscape = video.videoWidth > video.videoHeight;
       setIsLandscapeVideo(landscape);
 
-      // Use post-rotation dimensions for rect calculation when video is landscape
+      // Container dimensions — prefer the actual container element over the video element
+      // so the measurement isn't affected by the video's own CSS transform.
+      const containerW = containerRef.current?.clientWidth ?? video.clientWidth;
+      const containerH = containerRef.current?.clientHeight ?? video.clientHeight;
+      setContainerSize({ w: containerW, h: containerH });
+
+      // After a 90° rotation the effective display dimensions swap,
+      // so use post-rotation virtual dimensions for the canvas rect calculation.
       const vw = landscape ? video.videoHeight : video.videoWidth;
       const vh = landscape ? video.videoWidth : video.videoHeight;
-      const containerW = video.clientWidth;
-      const containerH = video.clientHeight;
       const videoAspect = vw / vh;
       const containerAspect = containerW / containerH;
 
       let renderW: number, renderH: number, offsetX: number, offsetY: number;
-
       if (videoAspect > containerAspect) {
-        // Video wider than container — letterbox top/bottom
         renderW = containerW;
         renderH = containerW / videoAspect;
         offsetX = 0;
         offsetY = (containerH - renderH) / 2;
       } else {
-        // Video taller — pillarbox left/right
         renderH = containerH;
         renderW = containerH * videoAspect;
         offsetX = (containerW - renderW) / 2;
@@ -49,7 +53,6 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
     video.addEventListener('loadedmetadata', updateRect);
     video.addEventListener('resize', updateRect);
     window.addEventListener('resize', updateRect);
-    // Also poll briefly in case events are missed
     const interval = setInterval(updateRect, 500);
 
     return () => {
@@ -60,30 +63,39 @@ export function CameraView({ videoRef, canvasRef }: CameraViewProps) {
     };
   }, [videoRef]);
 
-  // If camera returns landscape video, rotate it so it displays portrait.
+  // Portrait video (normal case): fill container with contain, mirror horizontally.
+  // Landscape video (fallback): swap CSS width/height before rotating 90° so that
+  // after the rotation the visual box exactly fills the portrait container.
   const videoStyle = useMemo(() => {
-    if (isLandscapeVideo) {
+    if (isLandscapeVideo && containerSize) {
       return {
         position: 'absolute' as const,
         top: '50%',
         left: '50%',
-        width: '100%',
-        height: '100%',
+        // CSS width becomes visual height after rotation, and vice-versa.
+        width: `${containerSize.h}px`,
+        height: `${containerSize.w}px`,
         objectFit: 'contain' as const,
+        objectPosition: 'center center',
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',
         maxHeight: 'none',
       };
     }
-    return { transform: 'scaleX(-1)' };
-  }, [isLandscapeVideo]);
+    return {
+      width: '100%',
+      height: '100%',
+      objectFit: 'contain' as const,
+      objectPosition: 'center center',
+      transform: 'scaleX(-1)',
+    };
+  }, [isLandscapeVideo, containerSize]);
 
   return (
-    <div className="absolute inset-0 z-0 bg-black">
+    <div ref={containerRef} className="absolute inset-0 z-0 bg-black">
       <video
         ref={videoRef}
-        className={isLandscapeVideo ? 'bg-black' : 'w-full h-full object-contain'}
         autoPlay
         playsInline
         muted

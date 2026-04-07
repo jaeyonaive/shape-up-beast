@@ -7,10 +7,12 @@ interface CameraOverlayProps {
 }
 
 export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [videoRect, setVideoRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
+  const [containerSize, setContainerSize] = useState<{ w: number; h: number } | null>(null);
 
   // Attach stream to video element
   useEffect(() => {
@@ -23,7 +25,7 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
     };
   }, [stream]);
 
-  // Match canvas to the visible contained video area so the camera feels zoomed out without cropping
+  // Track container size and compute canvas rect
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -34,19 +36,17 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
       const landscape = video.videoWidth > video.videoHeight;
       setIsLandscapeVideo(landscape);
 
-      // Use post-rotation dimensions for rect calculation when video is landscape
+      const containerW = containerRef.current?.clientWidth ?? video.clientWidth;
+      const containerH = containerRef.current?.clientHeight ?? video.clientHeight;
+      setContainerSize({ w: containerW, h: containerH });
+
+      // Use post-rotation virtual dimensions for canvas alignment
       const vw = landscape ? video.videoHeight : video.videoWidth;
       const vh = landscape ? video.videoWidth : video.videoHeight;
-      const containerW = video.clientWidth;
-      const containerH = video.clientHeight;
       const videoAspect = vw / vh;
       const containerAspect = containerW / containerH;
 
-      let renderW: number;
-      let renderH: number;
-      let offsetX: number;
-      let offsetY: number;
-
+      let renderW: number, renderH: number, offsetX: number, offsetY: number;
       if (videoAspect > containerAspect) {
         renderW = containerW;
         renderH = containerW / videoAspect;
@@ -89,33 +89,40 @@ export function CameraOverlay({ stream, landmarks }: CameraOverlayProps) {
     drawPose(ctx, landmarks, canvas.width, canvas.height);
   }, [landmarks]);
 
-  // If camera returns landscape video, rotate it -90° so it displays portrait.
-  // Swap width/height in CSS so the rotated video fills the container correctly.
+  // Portrait video: fill container with contain + mirror.
+  // Landscape video: swap CSS width/height before rotating so the visual box
+  // fills the portrait container correctly after the 90° turn.
   const videoStyle = useMemo(() => {
-    if (isLandscapeVideo) {
+    if (isLandscapeVideo && containerSize) {
       return {
         position: 'absolute' as const,
         top: '50%',
         left: '50%',
-        width: '100%',
-        height: '100%',
+        width: `${containerSize.h}px`,
+        height: `${containerSize.w}px`,
         objectFit: 'contain' as const,
+        objectPosition: 'center center',
         transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
         transformOrigin: 'center center',
         maxWidth: 'none',
         maxHeight: 'none',
       };
     }
-    return { transform: 'scaleX(-1)' };
-  }, [isLandscapeVideo]);
+    return {
+      width: '100%',
+      height: '100%',
+      objectFit: 'contain' as const,
+      objectPosition: 'center center',
+      transform: 'scaleX(-1)',
+    };
+  }, [isLandscapeVideo, containerSize]);
 
   if (!stream) return null;
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-xl bg-black">
+    <div ref={containerRef} className="relative w-full h-full overflow-hidden rounded-xl bg-black">
       <video
         ref={videoRef}
-        className={isLandscapeVideo ? 'bg-black' : 'w-full h-full object-contain bg-black'}
         autoPlay
         playsInline
         muted

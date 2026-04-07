@@ -133,16 +133,16 @@ export function CalibrationScreen({
     }
   }, [landmarks, videoReady]);
 
-  // Portrait video: fill viewport with contain (black bars acceptable — shows full body).
-  // Landscape video (device returned wrong orientation): rotate 90° so it appears portrait,
-  // swap the CSS width/height so the rotated video fills the screen correctly.
+  // Portrait video (normal): fill the fixed full-screen container with contain + mirror.
+  // Landscape video (fallback): CSS width/height are swapped before a 90° rotation so
+  // that after the turn the visual box fills the portrait viewport exactly.
   const videoStyle: CSSProperties = useMemo<CSSProperties>(() => {
     if (isLandscapeVideo) {
       return {
         position: 'absolute',
         top: '50%',
         left: '50%',
-        // Swap dimensions so after a 90° rotation the video fills portrait screen.
+        // CSS width becomes visual height after rotation, and vice-versa.
         width: '100vh',
         height: '100vw',
         objectFit: 'contain',
@@ -155,18 +155,11 @@ export function CalibrationScreen({
       };
     }
     return {
-      position: 'absolute',
-      top: '50%',
-      left: '50%',
-      width: '100vw',
-      height: '100vh',
+      width: '100%',
+      height: '100%',
       objectFit: 'contain',
       objectPosition: 'center center',
-      transform: 'translate(-50%, -50%) scaleX(-1)',
-      transformOrigin: 'center center',
-      maxWidth: 'none',
-      maxHeight: 'none',
-      background: 'transparent',
+      transform: 'scaleX(-1)',
     };
   }, [isLandscapeVideo]);
 
