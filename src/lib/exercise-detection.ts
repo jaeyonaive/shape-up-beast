@@ -118,11 +118,42 @@ export function createExerciseState(exerciseType: ExerciseType): ExerciseState {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function getMidHipY(landmarks: Landmark[]): number {
+// Detect which axis is vertical by comparing the shoulder-to-knee spread in x vs y.
+// The axis with the larger spread is the one running head-to-feet.
+// Returns 'y' for portrait video and 'x' for landscape video (rotated 90° on mobile).
+function getVerticalAxis(landmarks: Landmark[]): { axis: 'x' | 'y'; headIsAtLowValue: boolean } {
+  const lS = landmarks[POSE.LEFT_SHOULDER];
+  const lK = landmarks[POSE.LEFT_KNEE];
+  if (!lS || !lK) return { axis: 'y', headIsAtLowValue: true };
+
+  const xSpread = Math.abs(lS.x - lK.x);
+  const ySpread = Math.abs(lS.y - lK.y);
+
+  if (xSpread > ySpread) {
+    // Landscape video: x is the vertical axis.
+    // "headIsAtLowValue" = true when shoulder.x < knee.x (head at x≈0, feet at x≈1).
+    return { axis: 'x', headIsAtLowValue: lS.x < lK.x };
+  }
+  // Portrait video: y is vertical, head always at y≈0 (smaller value).
+  return { axis: 'y', headIsAtLowValue: true };
+}
+
+// Returns the hip's position along the vertical axis, normalized so that
+// 0 = head side and 1 = feet side (squatting always increases this value).
+// Works for both portrait and landscape camera frames.
+function getMidHipVertical(landmarks: Landmark[]): number {
   const lHip = landmarks[POSE.LEFT_HIP];
   const rHip = landmarks[POSE.RIGHT_HIP];
   if (!lHip || !rHip) return -1;
-  return (lHip.y + rHip.y) / 2;
+
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
+  const raw = axis === 'x'
+    ? (lHip.x + rHip.x) / 2
+    : (lHip.y + rHip.y) / 2;
+
+  // Normalize: if head is at the HIGH end of the axis, flip so that
+  // squatting (moving toward feet) always increases the returned value.
+  return headIsAtLowValue ? raw : 1 - raw;
 }
 
 function hasFullBody(landmarks: Landmark[]): boolean {
@@ -140,54 +171,32 @@ function hasFullBody(landmarks: Landmark[]): boolean {
   const lS = landmarks[POSE.LEFT_SHOULDER];
   const rS = landmarks[POSE.RIGHT_SHOULDER];
   const lH = landmarks[POSE.LEFT_HIP];
-  const rH = landmarks[POSE.RIGHT_HIP];
   const lK = landmarks[POSE.LEFT_KNEE];
-  const rK = landmarks[POSE.RIGHT_KNEE];
 
-  // Anatomical ordering (top -> bottom)
-  if (lS.y >= lH.y || rS.y >= rH.y) return false;
-  if (lH.y >= lK.y || rH.y >= rK.y) return false;
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
 
-  const shoulderWidth = Math.abs(rS.x - lS.x);
-  if (shoulderWidth < 0.02) return false;
+  // Anatomical ordering: shoulder must be "above" hip, hip above knee.
+  // The direction of "above" depends on camera orientation.
+  const coord = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
+  const dir = headIsAtLowValue ? 1 : -1; // +1: smaller coord = higher up; -1: larger = higher up
+
+  if (dir * coord(lS) >= dir * coord(lH)) return false; // shoulder not above hip
+  if (dir * coord(lH) >= dir * coord(lK)) return false; // hip not above knee
+
+  // Shoulder width: the axis perpendicular to vertical
+  const widthCoord = (lm: { x: number; y: number }) => axis === 'x' ? lm.y : lm.x;
+  if (Math.abs(widthCoord(rS) - widthCoord(lS)) < 0.02) return false;
 
   return true;
 }
 
-export function hasKneesVisible(landmarks: Landmark[]): boolean {
-  const lKnee = landmarks[POSE.LEFT_KNEE];
-  const rKnee = landmarks[POSE.RIGHT_KNEE];
-  return !!(lKnee && rKnee && (lKnee.visibility ?? 0) > 0.25 && (rKnee.visibility ?? 0) > 0.25);
-}
-
-// Returns a framing guidance message when the camera view is too zoomed in,
-// or null when head and feet are both visible.
-function getFramingGuidance(landmarks: Landmark[]): string | null {
-  const nose = landmarks[POSE.NOSE];
-  const lAnkle = landmarks[POSE.LEFT_ANKLE];
-  const rAnkle = landmarks[POSE.RIGHT_ANKLE];
-
-  const headVisible = !!(nose && (nose.visibility ?? 0) > 0.3);
-  const anklesVisible =
-    !!(lAnkle && (lAnkle.visibility ?? 0) > 0.3) ||
-    !!(rAnkle && (rAnkle.visibility ?? 0) > 0.3);
-
-  if (!anklesVisible && !headVisible) return 'Step back — full body not visible';
-  if (!anklesVisible) return 'Step back — feet not in frame';
-  if (!headVisible) return 'Step back — head not in frame';
-  return null;
-}
-
+// Body height: span between shoulder and knee along the vertical axis.
 function getBodyHeight(landmarks: Landmark[]): number {
-  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
-  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
-  const lKnee = landmarks[POSE.LEFT_KNEE];
-  const rKnee = landmarks[POSE.RIGHT_KNEE];
-  if (!lShoulder || !rShoulder || !lKnee || !rKnee) return 0;
-
-  const shoulderY = (lShoulder.y + rShoulder.y) / 2;
-  const kneeY = (lKnee.y + rKnee.y) / 2;
-  return Math.max(0, kneeY - shoulderY);
+  const lS = landmarks[POSE.LEFT_SHOULDER];
+  const lK = landmarks[POSE.LEFT_KNEE];
+  if (!lS || !lK) return 0;
+  // Use the larger spread — whichever axis is vertical will have the bigger value
+  return Math.max(Math.abs(lS.y - lK.y), Math.abs(lS.x - lK.x));
 }
 
 // EMA smoother: lower latency than median, still removes single-frame noise.
@@ -271,7 +280,7 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     };
   }
 
-  const hipY = getMidHipY(landmarks);
+  const hipY = getMidHipVertical(landmarks);
   const bodyHeight = getBodyHeight(landmarks);
   if (hipY < 0 || bodyHeight <= 0) {
     return { ...prevState, feedback: 'No body detected', bodyDetected: false, kneesVisible: kneesVis };
