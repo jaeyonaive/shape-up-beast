@@ -12,7 +12,8 @@ import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay
 import {
   WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
-  getComboMultiplier, getComboLabel,
+  getComboMultiplier, getComboLabel, CRIT_CHANCE, CRIT_MULTIPLIER,
+  getRank, getRepMessage,
 } from '@/lib/game-data';
 import { Button } from '@/components/ui/button';
 import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
@@ -30,8 +31,11 @@ export default function Battle() {
   const [streak, setStreak] = useState(0);
   const [calories, setCalories] = useState(0);
   const [totalReps, setTotalReps] = useState(0);
+  const [totalDamage, setTotalDamage] = useState(0);
+  const [bestCombo, setBestCombo] = useState(0);
   const [monsterHP, setMonsterHP] = useState(MONSTER_MAX_HP);
   const [isHit, setIsHit] = useState(false);
+  const [isCrit, setIsCrit] = useState(false);
   const [damageText, setDamageText] = useState<string | null>(null);
   const [comboText, setComboText] = useState<string | null>(null);
   const [gameMessage, setGameMessage] = useState<string | null>(null);
@@ -47,11 +51,14 @@ export default function Battle() {
   const prevRepRef = useRef(0);
   const lastRepTimeRef = useRef(Date.now());
   const streakRef = useRef(0);
+  const bestComboRef = useRef(0);
+  const phaseTimeLeftRef = useRef(WORKOUT_PHASES[0].duration);
 
   useEffect(() => {
     if (!gameActive || sessionOver || workoutComplete) return;
     const interval = setInterval(() => {
       setPhaseTimeLeft(t => {
+        phaseTimeLeftRef.current = t - 1;
         if (t <= 1) {
           const nextIdx = phaseIndex + 1;
           if (nextIdx >= WORKOUT_PHASES.length) {
@@ -130,18 +137,26 @@ export default function Battle() {
       lastRepTimeRef.current = Date.now();
 
       const exType = newState.exerciseType;
-      const damage = DAMAGE_MAP[exType];
+      const baseDamage = DAMAGE_MAP[exType];
       const calPerRep = CALORIES_PER_REP[exType];
 
       const newStreak = streakRef.current + 1;
       streakRef.current = newStreak;
       setStreak(newStreak);
+      if (newStreak > bestComboRef.current) {
+        bestComboRef.current = newStreak;
+        setBestCombo(newStreak);
+      }
 
+      const critRoll = Math.random() < CRIT_CHANCE;
       const multiplier = getComboMultiplier(newStreak);
-      setScore(s => s + BASE_POINTS_PER_REP * multiplier);
+      const damage = baseDamage * multiplier * (critRoll ? CRIT_MULTIPLIER : 1);
+
+      setScore(s => s + BASE_POINTS_PER_REP * multiplier * (critRoll ? CRIT_MULTIPLIER : 1));
       setCoins(c => c + COINS_PER_REP * multiplier);
       setCalories(cal => +(cal + calPerRep).toFixed(1));
       setTotalReps(r => r + 1);
+      setTotalDamage(d => d + damage);
 
       setMonsterHP(hp => {
         const newHP = Math.max(0, hp - damage);
@@ -152,22 +167,16 @@ export default function Battle() {
       const label = getComboLabel(newStreak);
       if (label) setComboText(label);
 
+      setIsCrit(critRoll);
       setIsHit(true);
-      setDamageText(`-${damage}`);
+      setDamageText(critRoll ? `💥 -${damage}` : `-${damage}`);
 
-      // Gamified bottom message
-      const messages = [
-        `💥 You dealt ${damage} damage!`,
-        `🔥 Squat registered! -${damage} HP`,
-        `⚔️ Critical hit! ${damage} damage!`,
-        `💪 Nice rep! Monster took ${damage}!`,
-      ];
-      const msg = messages[Math.floor(Math.random() * messages.length)];
+      const msg = getRepMessage(damage, newStreak, critRoll, phaseTimeLeftRef.current);
       if (gameMessageTimer.current) clearTimeout(gameMessageTimer.current);
       setGameMessage(msg);
       gameMessageTimer.current = setTimeout(() => setGameMessage(null), 1800);
 
-      setTimeout(() => { setIsHit(false); setDamageText(null); }, 400);
+      setTimeout(() => { setIsHit(false); setDamageText(null); setIsCrit(false); }, 400);
     }
   }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
 
@@ -204,22 +213,25 @@ export default function Battle() {
     state.totalReps += totalReps;
     state.totalCalories = +(state.totalCalories + calories).toFixed(1);
     if (score > state.highScore) state.highScore = score;
-    if (streak > state.bestStreak) state.bestStreak = streak;
+    if (bestComboRef.current > state.bestStreak) state.bestStreak = bestComboRef.current;
     saveGameState(state);
-  }, [coins, calories, score, streak, totalReps, stopCamera]);
+  }, [coins, calories, score, totalReps, stopCamera]);
 
   useEffect(() => { handleStart(); }, [handleStart]);
 
   if (sessionOver) {
+    const rank = getRank(totalReps);
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
         <div className="game-panel p-8 max-w-sm w-full text-center slide-up">
-          <div className="text-6xl mb-4">🏆</div>
-          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-2">Workout Complete!</h2>
+          <div className="text-5xl mb-1">{rank.emoji}</div>
+          <p className="font-pixel text-xs text-secondary game-text-shadow mb-1">{rank.label}</p>
+          <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-4">Workout Complete!</h2>
           <div className="space-y-2 mb-6">
             <p className="font-body text-sm text-foreground">Score: <span className="font-pixel text-primary">{score}</span></p>
             <p className="font-body text-sm text-foreground">Total Reps: <span className="font-pixel text-primary">{totalReps}</span></p>
-            <p className="font-body text-sm text-foreground">Best Combo: <span className="font-pixel text-secondary">x{streak}</span></p>
+            <p className="font-body text-sm text-foreground">Total Damage: <span className="font-pixel text-destructive">{totalDamage}</span></p>
+            <p className="font-body text-sm text-foreground">Best Combo: <span className="font-pixel text-secondary">x{bestCombo}</span></p>
             <p className="font-body text-sm text-foreground">Calories: <span className="font-pixel text-game-gold">{calories} kcal</span></p>
             <p className="font-body text-sm text-game-gold">+{coins}G earned!</p>
           </div>
@@ -277,7 +289,7 @@ export default function Battle() {
       </div>
 
       <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} />
+        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} hpPercent={hpPercent} isCrit={isCrit} />
       </div>
 
       {damageText && (

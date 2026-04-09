@@ -109,6 +109,14 @@
     animation: monsterHit 0.3s ease-in-out;
   }
 
+  .monster-low-hp {
+    animation: monsterFloat 3s ease-in-out infinite, monsterLowHpPulse 1.2s ease-in-out infinite;
+  }
+
+  .monster-crit {
+    animation: monsterCrit 0.4s ease-in-out;
+  }
+
   .coin-bounce {
     animation: coinBounce 0.6s ease-out;
   }
@@ -137,6 +145,20 @@
   50% { transform: translateX(10px); }
   75% { transform: translateX(-5px); }
   100% { transform: translateX(0); filter: brightness(1); }
+}
+
+@keyframes monsterLowHpPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.4) hue-rotate(-20deg); }
+}
+
+@keyframes monsterCrit {
+  0% { transform: translateX(0) scale(1); filter: brightness(3) saturate(2); }
+  20% { transform: translateX(-15px) scale(1.1); }
+  40% { transform: translateX(15px) scale(0.95); }
+  60% { transform: translateX(-8px) scale(1.05); }
+  80% { transform: translateX(8px) scale(1); }
+  100% { transform: translateX(0) scale(1); filter: brightness(1) saturate(1); }
 }
 
 @keyframes coinBounce {

@@ -15,6 +15,10 @@ export const BASE_POINTS_PER_REP = 10;
 export const COINS_PER_REP = 5;
 export const CALORIES_PER_SQUAT = 0.32;
 
+// Critical hits
+export const CRIT_CHANCE = 0.15;
+export const CRIT_MULTIPLIER = 2;
+
 // Combo system
 export const COMBO_TIMEOUT_MS = 4000;
 
@@ -24,6 +28,22 @@ export function getComboMultiplier(streak: number): number {
   if (streak >= 10) return 3;
   if (streak >= 5) return 2;
   return 1;
+}
+
+export function getRank(totalReps: number): { label: string; emoji: string } {
+  if (totalReps >= 20) return { label: 'BEAST', emoji: '🔥' };
+  if (totalReps >= 10) return { label: 'STRONG', emoji: '⚡' };
+  return { label: 'BEGINNER', emoji: '🌱' };
+}
+
+export function getRepMessage(damage: number, streak: number, isCrit: boolean, timeLeft: number): string {
+  if (isCrit) return `💥 CRITICAL HIT! -${damage} HP!`;
+  if (timeLeft <= 10) return `💪 FINAL PUSH! -${damage}`;
+  if (streak >= 10) return `🔥 x${streak} UNSTOPPABLE! -${damage}`;
+  if (streak >= 5) return `⚡ Combo x${streak}! -${damage}`;
+  if (streak >= 3) return `🔥 x${streak} -${damage}`;
+  const pool = [`💥 -${damage} HP!`, `⚔️ Nice rep!`, `💪 Keep going!`, `⭐ Hit! -${damage}`, `🗡️ Strike! -${damage}`];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 export function getComboLabel(streak: number): string | null {
