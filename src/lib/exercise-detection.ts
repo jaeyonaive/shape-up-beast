@@ -55,21 +55,23 @@ export interface ExerciseState {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 8;           // more frames required before calibration starts
+const BODY_DETECT_FRAMES = 8;
 const CALIBRATION_TIMEOUT_MS = 6000;
-const SMOOTHING_ALPHA = 0.25;  // lower = smoother, filters clothing jitter
-const REP_COOLDOWN_MS = 600;
+const SMOOTHING_ALPHA = 0.25;
+const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
 const SQUAT_DEFAULT_DROP_RATIO = 0.22;
 const SQUAT_MIN_DROP_RATIO = 0.2;
 const SQUAT_MAX_DROP_RATIO = 0.25;
-// Fraction of calibrated drop range that defines "deep enough" and "back to standing"
-const SQUAT_DOWN_FRACTION = 0.65;   // hips at 65% of calibrated depth → "down"
-const SQUAT_UP_FRACTION = 0.30;     // hips within 30% of standing → "back up"
-const MIN_CALIB_DROP = 0.05;        // minimum meaningful calibrated drop (safety guard)
-// Dual-condition squat guards (prevent false positives from lateral movement)
-const SQUAT_KNEE_ANGLE_DOWN = 110;       // knee angle must be ≤ this to count as "at bottom"
-const SQUAT_MIN_ABSOLUTE_DROP = 0.18;    // hip must drop ≥ 18% of body height (absolute guard)
+// How far down (as fraction of calibrated drop) triggers "at bottom"
+const SQUAT_DOWN_FRACTION = 0.55;   // 55% of calibrated depth → "down" (was 65%, too strict)
+// How far back up (as fraction of calibrated drop) triggers rep count
+const SQUAT_UP_FRACTION = 0.30;
+const MIN_CALIB_DROP = 0.05;
+// Knee angle used only for FEEDBACK, not gating — avoids false rejections when
+// ankles are off-screen (getKneeAngle() returns 180° = straight as a safe fallback,
+// which would permanently block reps if used as a hard gate condition)
+const SQUAT_KNEE_ANGLE_HINT = 130;  // > 130° → suggest bending knees more
 
 const ADAPTIVE_STEP = 0.005;
 const PARTIAL_DESCENT_FRACTION = 0.30;  // 30% of calibDrop = user started descending
@@ -550,18 +552,28 @@ function getKneeAngle(landmarks: Landmark[]): number {
   return angles.reduce((sum, a) => sum + a, 0) / angles.length;
 }
 
+// ─── Squat Detection ─────────────────────────────────────────────────────────
+//
+//  standing ──(hips drop below downThreshold)──▶ at_bottom
+//  at_bottom ──(hips return above upThreshold)──▶ cooldown  (+1 rep)
+//  cooldown  ──(REP_COOLDOWN_MS elapsed)──▶ standing
+//
+//  Gate condition: hip drop ONLY (single condition).
+//  Knee angle is computed for form feedback but does NOT block rep counting —
+//  when ankles are off-screen, getKneeAngle() returns 180° (straight),
+//  which would permanently reject squats if used as a hard gate.
+
 function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedHipY: number, timeSinceRep: number, now: number): ExerciseState {
   const calibDrop = Math.max(state._threshold - state._standingHipY, MIN_CALIB_DROP);
 
   const downThreshold = state._standingHipY + calibDrop * SQUAT_DOWN_FRACTION;
   const upThreshold   = state._standingHipY + calibDrop * SQUAT_UP_FRACTION;
 
-  const bodyH     = getBodyHeight(landmarks);
-  const kneeAngle = getKneeAngle(landmarks);
-  const hipDrop   = smoothedHipY - state._standingHipY;
+  const bodyH   = getBodyHeight(landmarks);
+  const hipDrop = smoothedHipY - state._standingHipY;
 
-  const hipsLow   = smoothedHipY >= downThreshold && hipDrop >= bodyH * SQUAT_MIN_ABSOLUTE_DROP;
-  const kneesBent = kneeAngle <= SQUAT_KNEE_ANGLE_DOWN;
+  // Single gate: did hips drop below the threshold?
+  const hipsLow = smoothedHipY >= downThreshold;
 
   const phase = state.phase;
 
@@ -575,7 +587,7 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
     return state;
   }
 
-  // ── STANDING / DESCENDING ─────────────────────────────────────────────────
+  // ── STANDING ─────────────────────────────────────────────────────────────
   if (phase === 'standing' || phase === 'descending' || phase === 'ascending') {
     const dropFraction = calibDrop > 0 ? hipDrop / calibDrop : 0;
 
@@ -584,30 +596,26 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
       state._peakHipY = Math.max(state._peakHipY, smoothedHipY);
     }
 
-    // Partial-descent tracking: user started going down but hasn't hit threshold
+    // Partial-descent tracking for accuracy metric
     if (dropFraction >= PARTIAL_DESCENT_FRACTION) {
       state._inPartialDescent = true;
     } else if (state._inPartialDescent && dropFraction < 0.15) {
-      // They reversed back to near-standing without reaching depth → failed attempt
       state._partialAttempts += 1;
       state._inPartialDescent = false;
       state._peakHipY = 0;
     }
 
-    if (hipsLow && kneesBent) {
+    if (hipsLow) {
       state.phase = 'at_bottom';
       state._reachedDepth = true;
       state._inPartialDescent = false;
-      state.feedback = 'Good depth! Come back up!';
+      state.feedback = 'Good! Come back up!';
       state.formQuality = 'good';
-    } else if (hipsLow && !kneesBent) {
+    } else if (dropFraction >= PARTIAL_DESCENT_FRACTION) {
+      // Descending but not yet at depth — give form hint
+      const kneeAngle = getKneeAngle(landmarks);
       state.phase = 'standing';
-      state.feedback = 'Bend your knees! 🦵';
-      state.formQuality = 'needs_work';
-    } else if (dropFraction >= PARTIAL_DESCENT_FRACTION && dropFraction < SQUAT_DOWN_FRACTION) {
-      // In the "go lower" zone: descending but hasn't hit depth yet
-      state.phase = 'standing';
-      state.feedback = 'GO LOWER ⬇️';
+      state.feedback = kneeAngle > SQUAT_KNEE_ANGLE_HINT ? 'Bend knees more! ⬇️' : 'GO LOWER ⬇️';
       state.formQuality = 'needs_work';
     } else {
       state.phase = 'standing';
@@ -619,35 +627,26 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 
   // ── AT_BOTTOM ─────────────────────────────────────────────────────────────
   if (phase === 'at_bottom') {
-    // Keep updating peak while user lingers at the bottom
     state._peakHipY = Math.max(state._peakHipY, smoothedHipY);
 
     if (smoothedHipY <= upThreshold) {
-      // Compute how deep they actually went
       const depthRatio = calibDrop > 0
         ? (state._peakHipY - state._standingHipY) / calibDrop
         : 1.0;
 
-      // ── Adaptive difficulty ─────────────────────────────────────────────
+      // Adaptive difficulty: adjust threshold based on rolling depth average
       const adaptHistory = [...state._adaptiveHistory, depthRatio].slice(-5);
       state._adaptiveHistory = adaptHistory;
       if (adaptHistory.length >= 3) {
         const avg = adaptHistory.reduce((s, v) => s + v, 0) / adaptHistory.length;
         if (avg > 1.3) {
-          // Comfortably deep — raise the bar slightly
           state._squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, state._squatDropRatio + ADAPTIVE_STEP);
           state._threshold = state._standingHipY + bodyH * state._squatDropRatio;
         } else if (avg < 1.05) {
-          // Barely making it — ease the bar slightly
           state._squatDropRatio = Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio - ADAPTIVE_STEP);
           state._threshold = state._standingHipY + bodyH * state._squatDropRatio;
         }
       }
-
-      // ── Rep feedback based on depth quality ─────────────────────────────
-      const repFeedback = depthRatio >= PERFECT_REP_DEPTH_RATIO
-        ? 'PERFECT REP 🔥'
-        : `Rep ${state.repCount + 1}!`;
 
       state.repCount += 1;
       state._lastRepTime = now;
@@ -655,7 +654,7 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
       state._inPartialDescent = false;
       state._peakHipY = 0;
       state.phase = 'cooldown';
-      state.feedback = repFeedback;
+      state.feedback = depthRatio >= PERFECT_REP_DEPTH_RATIO ? 'PERFECT REP 🔥' : `Rep ${state.repCount}!`;
       state.formQuality = 'good';
     } else {
       state.feedback = 'Stand back up!';
