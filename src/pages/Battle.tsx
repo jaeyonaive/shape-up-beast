@@ -178,6 +178,20 @@ export default function Battle() {
   }, [monsterDefeated]);
 
   const handleStart = useCallback(async () => {
+    // Always reset exercise state before (re)starting the camera.
+    // If this is a retry, exerciseStateRef may hold a stale _calibStartTime,
+    // _standingHipY, _hipYHistory, etc.  The calibration timer uses
+    //   elapsed = now - _calibStartTime
+    // so a stale timestamp from a previous attempt makes elapsed huge on the
+    // very first frame, causing the calibration timeout to fire immediately
+    // and skip to gameplay with zero valid baseline values.
+    const freshState = createExerciseState(WORKOUT_PHASES[0].exercise);
+    exerciseStateRef.current = freshState;
+    prevRepRef.current  = 0;
+    streakRef.current   = 0;
+    lastRepTimeRef.current = Date.now();
+    setDisplayState({ ...freshState });
+    setGameActive(false);
     setStarted(true);
     await startCamera();
   }, [startCamera]);
