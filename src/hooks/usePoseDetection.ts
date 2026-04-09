@@ -360,5 +360,5 @@ export function usePoseDetection() {
 
   useEffect(() => () => stopCamera(), [stopCamera]);
 
-  return { landmarks, isLoading, error, cameraActive, cameraStatus, startCamera, stopCamera, stream };
+  return { landmarks, isLoading, error, cameraActive, cameraStatus, startCamera, stopCamera, stream, videoRef };
 }

@@ -1,9 +1,64 @@
-import { useRef, useEffect, useState, useMemo, type CSSProperties } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { type Landmark, drawPose } from '@/lib/pose-detection';
+import { type Landmark } from '@/lib/pose-detection';
+
+// ── Skeleton drawing ──────────────────────────────────────────────────────────
+
+const CONNECTIONS: [number, number][] = [
+  [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
+  [11, 23], [12, 24], [23, 24],
+  [23, 25], [25, 27], [24, 26], [26, 28],
+];
+const KEY_POINTS = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28];
+
+/**
+ * Draw the pose skeleton onto the canvas at positions given by toX/toY.
+ * Coordinates are in canvas-pixel space (not normalised 0-1).
+ */
+function drawSkeleton(
+  ctx: CanvasRenderingContext2D,
+  landmarks: Landmark[],
+  toX: (lm: Landmark) => number,
+  toY: (lm: Landmark) => number,
+) {
+  ctx.save();
+
+  ctx.strokeStyle = 'hsl(200, 85%, 55%)';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+
+  for (const [i, j] of CONNECTIONS) {
+    const s = landmarks[i];
+    const e = landmarks[j];
+    if (s && e) {
+      ctx.beginPath();
+      ctx.moveTo(toX(s), toY(s));
+      ctx.lineTo(toX(e), toY(e));
+      ctx.stroke();
+    }
+  }
+
+  for (const idx of KEY_POINTS) {
+    const lm = landmarks[idx];
+    if (lm) {
+      ctx.beginPath();
+      ctx.arc(toX(lm), toY(lm), 6, 0, 2 * Math.PI);
+      ctx.fillStyle = 'hsl(145, 80%, 50%)';
+      ctx.fill();
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface CalibrationScreenProps {
-  stream: MediaStream | null;
+  /** Ref to the hidden video element managed by usePoseDetection. */
+  videoRef: React.RefObject<HTMLVideoElement | null>;
   landmarks: Landmark[] | null;
   feedback: string;
   calibrationProgress: number;
@@ -17,7 +72,7 @@ interface CalibrationScreenProps {
 }
 
 export function CalibrationScreen({
-  stream,
+  videoRef,
   landmarks,
   feedback,
   calibrationProgress,
@@ -28,196 +83,195 @@ export function CalibrationScreen({
   error,
   onRetry,
 }: CalibrationScreenProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [videoReady, setVideoReady] = useState(false);
-  const [isLandscapeVideo, setIsLandscapeVideo] = useState(false);
 
-  // ── Step 1: Detect landscape orientation from track settings immediately ──
-  // MediaStreamTrack.getSettings() is available as soon as the stream exists,
-  // unlike video.videoWidth which can return 0 indefinitely on iOS Safari.
-  useEffect(() => {
-    if (!stream) {
-      setIsLandscapeVideo(false);
-      return;
-    }
-    const track = stream.getVideoTracks()[0];
-    if (track) {
-      const settings = track.getSettings();
-      if (settings.width && settings.height) {
-        const landscape = settings.width > settings.height;
-        console.log(`[Calibration] Track: ${settings.width}x${settings.height} → ${landscape ? 'landscape' : 'portrait'}`);
-        setIsLandscapeVideo(landscape);
-      } else {
-        // iOS sometimes omits dimensions from getSettings() — fall back to screen
-        // orientation: if the phone is portrait the camera delivers landscape frames.
-        const phoneIsPortrait = window.innerWidth < window.innerHeight;
-        console.log(`[Calibration] No track dimensions; screen portrait=${phoneIsPortrait}`);
-        setIsLandscapeVideo(phoneIsPortrait);
-      }
-    }
-  }, [stream]);
+  // Keep the latest landmarks in a ref so the RAF loop can read them without
+  // restarting the loop every time landmarks change.
+  const landmarksRef = useRef<Landmark[] | null>(null);
+  useEffect(() => { landmarksRef.current = landmarks; }, [landmarks]);
 
-  // ── Step 2: Attach stream to the (hidden) video element ──
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !stream) {
-      setVideoReady(false);
-      return;
-    }
-    let cancelled = false;
-    const attach = async () => {
-      try {
-        video.srcObject = stream;
-        await video.play();
-        if (!cancelled) setVideoReady(video.readyState >= 2);
-      } catch (e) {
-        console.error('[Calibration] Video attach failed:', e);
-        if (!cancelled) setVideoReady(false);
-      }
-    };
-    attach();
+  // Signal that the canvas has drawn its first frame (used to hide the spinner).
+  const canvasReadyRef = useRef(false);
+  const [canvasReady, setCanvasReady] = useState(false);
 
-    // Confirm readiness when video starts decoding (belt-and-suspenders for iOS)
-    const onReady = () => { if (!cancelled) setVideoReady(true); };
-    video.addEventListener('canplay', onReady);
-    // Also re-confirm landscape detection once video dimensions are available
-    const onMeta = () => {
-      if (cancelled || !video.videoWidth || !video.videoHeight) return;
-      const landscape = video.videoWidth > video.videoHeight;
-      setIsLandscapeVideo(landscape);
-    };
-    video.addEventListener('loadedmetadata', onMeta);
+  // ── Canvas render loop ────────────────────────────────────────────────────
+  //
+  // This is the key fix for iOS Safari: CSS transforms on <video> elements are
+  // unreliable — WebKit sometimes renders the video at its native orientation
+  // regardless of the transform property.  Drawing the video into a <canvas>
+  // via ctx.drawImage() with explicit ctx.rotate() / ctx.scale() is 100%
+  // reliable across all browsers.
+  //
+  // The loop runs once per animation frame.  It reads from the same hidden
+  // video element that MediaPipe uses (shared via videoRef), so there is only
+  // ONE video element consuming the stream — avoiding iOS double-decode issues.
 
-    return () => {
-      cancelled = true;
-      video.removeEventListener('canplay', onReady);
-      video.removeEventListener('loadedmetadata', onMeta);
-      video.srcObject = null;
-      setVideoReady(false);
-    };
-  }, [stream]);
-
-  // ── Step 3: Draw skeleton overlay canvas ──
-  // Use track settings for dimensions when the display video hasn't decoded yet.
-  // This ensures the canvas matches the actual video resolution from frame 1.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Prefer live video dimensions → track settings → safe defaults (in that order)
-    const video = videoRef.current;
-    const settings = stream?.getVideoTracks()[0]?.getSettings();
-    const vw = (video?.videoWidth  > 0 ? video.videoWidth  : null)
-            ?? settings?.width
-            ?? 640;
-    const vh = (video?.videoHeight > 0 ? video.videoHeight : null)
-            ?? settings?.height
-            ?? 480;
+    let rafId: number;
+    let cancelled = false;
 
-    canvas.width  = vw;
-    canvas.height = vh;
+    const draw = () => {
+      if (cancelled) return;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, vw, vh);
-    if (landmarks) {
-      drawPose(ctx, landmarks, vw, vh);
-    }
-  }, [landmarks, videoReady, stream]);
+      const video = videoRef.current;
 
-  // ── Video + canvas style ──
-  // Landscape video (iOS): pre-rotate element so CSS width becomes visual height.
-  //   width: 100vh (becomes visual height after -90° rotation)
-  //   height: 100vw (becomes visual width after -90° rotation)
-  //   objectFit: cover — fills the portrait screen without black bars
-  //   scaleX(-1) — mirrors for selfie
-  //
-  // Portrait video (desktop / explicit portrait stream): simple mirror.
-  const rotatedStyle: CSSProperties = useMemo(() => ({
-    position: 'absolute',
-    top: '50%',
-    left: '50%',
-    width: '100vh',
-    height: '100vw',
-    objectFit: 'cover',
-    transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
-    transformOrigin: 'center center',
-    maxWidth: 'none',
-    maxHeight: 'none',
-  }), []);
+      if (
+        video &&
+        video.readyState >= 2 &&
+        video.videoWidth > 0 &&
+        video.videoHeight > 0
+      ) {
+        const vw = video.videoWidth;
+        const vh = video.videoHeight;
 
-  const portraitStyle: CSSProperties = useMemo(() => ({
-    width: '100%',
-    height: '100%',
-    objectFit: 'cover',
-    transform: 'scaleX(-1)',
-  }), []);
+        // Use CSS pixels so the canvas matches the visible viewport exactly.
+        const W = window.innerWidth;
+        const H = window.innerHeight;
 
-  const videoStyle = isLandscapeVideo ? rotatedStyle : portraitStyle;
-  // Canvas uses the same transform so the skeleton overlay aligns with the video
-  const canvasStyle: CSSProperties = isLandscapeVideo
-    ? {
-        position: 'absolute',
-        top: '50%',
-        left: '50%',
-        width: '100vh',
-        height: '100vw',
-        transform: 'translate(-50%, -50%) rotate(-90deg) scaleX(-1)',
-        transformOrigin: 'center center',
-        maxWidth: 'none',
-        maxHeight: 'none',
-        pointerEvents: 'none',
+        if (canvas.width !== W || canvas.height !== H) {
+          canvas.width = W;
+          canvas.height = H;
+        }
+
+        if (!canvasReadyRef.current) {
+          canvasReadyRef.current = true;
+          setCanvasReady(true);
+        }
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { rafId = requestAnimationFrame(draw); return; }
+
+        ctx.clearRect(0, 0, W, H);
+
+        const lmk = landmarksRef.current;
+
+        // Rotate only when the video is landscape AND the screen is portrait.
+        // This covers iOS (front camera always delivers a landscape frame when
+        // the phone is held upright).  Desktop cameras in landscape screens
+        // are intentionally NOT rotated.
+        const needsRotation = vw > vh && W < H;
+
+        if (needsRotation) {
+          // ── Landscape video → portrait screen ──────────────────────────
+          //
+          // Strategy:
+          //   1. Rotate the canvas context -90° (CCW).
+          //   2. Mirror horizontally (selfie view).
+          //   3. Scale the video to COVER the portrait canvas.
+          //
+          // After the -90° rotation the video's effective visual size becomes
+          // vh × vw (width × height), so we derive the cover scale relative to
+          // those swapped dimensions.
+          const scale = Math.max(W / vh, H / vw);
+          const drawW = vw * scale;   // video's long edge, maps to canvas height
+          const drawH = vh * scale;   // video's short edge, maps to canvas width
+
+          ctx.save();
+          ctx.translate(W / 2, H / 2);
+          ctx.rotate(-Math.PI / 2);
+          ctx.scale(-1, 1);           // selfie mirror
+          ctx.drawImage(video, -drawW / 2, -drawH / 2, drawW, drawH);
+          ctx.restore();
+
+          // ── Landmark coordinate transform (landscape → portrait canvas) ──
+          //
+          // Derivation (applying scale→rotate→translate in that order to a
+          // video-space point at local coords (lx, ly) = (lm.x·drawW − drawW/2,
+          //                                               lm.y·drawH − drawH/2)):
+          //
+          //   scale(-1,1): (-lx, ly)
+          //   rotate(-π/2): (ly, lx)            [note: −(−lx) = lx]
+          //   translate(W/2,H/2): (ly+W/2, lx+H/2)
+          //
+          // Substituting back:
+          //   canvas_x = lm.y · drawH + (W − drawH) / 2
+          //   canvas_y = lm.x · drawW + (H − drawW) / 2
+          if (lmk) {
+            const ox = (W - drawH) / 2;
+            const oy = (H - drawW) / 2;
+            drawSkeleton(ctx, lmk,
+              (lm) => lm.y * drawH + ox,
+              (lm) => lm.x * drawW + oy,
+            );
+          }
+        } else {
+          // ── Portrait video (or landscape video in landscape screen) ─────
+          //
+          // Just scale to COVER and mirror horizontally.
+          const scale = Math.max(W / vw, H / vh);
+          const drawW = vw * scale;
+          const drawH = vh * scale;
+
+          ctx.save();
+          ctx.translate(W / 2, H / 2);
+          ctx.scale(-1, 1);           // selfie mirror
+          ctx.drawImage(video, -drawW / 2, -drawH / 2, drawW, drawH);
+          ctx.restore();
+
+          // ── Landmark coordinate transform (portrait canvas, mirrored) ───
+          //
+          // Derivation for scale(-1,1) + translate(W/2,H/2):
+          //   canvas_x = (1 − lm.x) · drawW + (W − drawW) / 2
+          //   canvas_y =       lm.y  · drawH + (H − drawH) / 2
+          if (lmk) {
+            const ox = (W - drawW) / 2;
+            const oy = (H - drawH) / 2;
+            drawSkeleton(ctx, lmk,
+              (lm) => (1 - lm.x) * drawW + ox,
+              (lm) => lm.y * drawH + oy,
+            );
+          }
+        }
       }
-    : {
-        position: 'absolute',
-        inset: 0,
-        width: '100%',
-        height: '100%',
-        transform: 'scaleX(-1)',
-        pointerEvents: 'none',
-      };
+
+      rafId = requestAnimationFrame(draw);
+    };
+
+    rafId = requestAnimationFrame(draw);
+    return () => { cancelled = true; cancelAnimationFrame(rafId); };
+  }, [videoRef]);   // videoRef object is stable; .current is read each frame
+
+  // ── UI strings ────────────────────────────────────────────────────────────
 
   const cameraMessage = error
     ? 'Camera failed to start'
-    : cameraActive && videoReady
+    : cameraActive && canvasReady
       ? 'Camera active'
       : cameraStatus === 'requesting-permission'
         ? 'Requesting camera permission…'
         : 'Camera starting…';
 
   const bodyMessage = bodyDetected ? 'Body detected' : 'Body not detected';
-  const showLoading = !error && !videoReady && (
-    isLoading || cameraStatus === 'requesting-permission' || cameraStatus === 'starting-camera'
+
+  const showLoading = !error && !canvasReady && (
+    isLoading ||
+    cameraStatus === 'requesting-permission' ||
+    cameraStatus === 'starting-camera'
   );
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <>
-      {/* Camera layer */}
-      <div
+      {/* Camera + skeleton layer: a single canvas replaces the <video> element.
+          Canvas 2D transforms are reliable on iOS; CSS transforms on <video>
+          are not — that is why we use this approach. */}
+      <canvas
+        ref={canvasRef}
         style={{
           position: 'fixed',
           top: 0,
           left: 0,
           width: '100vw',
           height: '100vh',
-          overflow: 'hidden',
+          display: 'block',
           zIndex: 50,
           background: '#000',
         }}
-      >
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={videoStyle}
-        />
-        <canvas
-          ref={canvasRef}
-          style={canvasStyle}
-        />
-      </div>
+      />
 
       {/* HUD layer */}
       <div
