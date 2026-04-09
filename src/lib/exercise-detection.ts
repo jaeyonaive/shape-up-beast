@@ -212,40 +212,83 @@ function smoothY(history: number[], newVal: number): { smoothed: number; history
 
 // ─── Jumping Jack helpers ────────────────────────────────────────────────────
 
-function getArmSpread(landmarks: Landmark[]): number {
-  const lWrist = landmarks[POSE.LEFT_WRIST];
-  const rWrist = landmarks[POSE.RIGHT_WRIST];
-  const lElbow = landmarks[POSE.LEFT_ELBOW];
-  const rElbow = landmarks[POSE.RIGHT_ELBOW];
+// ─── Jumping Jack constants ───────────────────────────────────────────────────
+
+/** Ankle spread / shoulder width ratio that defines the OPEN position. */
+const JJ_OPEN_LEG_RATIO   = 1.4;  // ankles ≥ 1.4× shoulder width → legs open
+/** Ankle spread / shoulder width ratio that defines the CLOSED position.
+ *  The gap between CLOSED (0.9) and OPEN (1.4) gives hysteresis so a single
+ *  noisy frame cannot flip the state. */
+const JJ_CLOSED_LEG_RATIO = 0.9;  // ankles ≤ 0.9× shoulder width → legs closed
+
+// ─── Jumping Jack helpers ─────────────────────────────────────────────────────
+
+/**
+ * Ankle spread normalised to shoulder width using the orientation-aware
+ * HORIZONTAL axis (perpendicular to vertical), so it works for both portrait
+ * and landscape camera frames.
+ *
+ * Returns -1 when ankle landmarks are not reliably visible.
+ */
+function getLegSpreadRatio(landmarks: Landmark[]): number {
+  const lAnkle   = landmarks[POSE.LEFT_ANKLE];
+  const rAnkle   = landmarks[POSE.RIGHT_ANKLE];
   const lShoulder = landmarks[POSE.LEFT_SHOULDER];
   const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
-  if (!lWrist || !rWrist || !lShoulder || !rShoulder || !lElbow || !rElbow) return 0;
 
-  // Use the axis-aware vertical coord so this works for both portrait and
-  // landscape camera frames (on mobile the frame is landscape, so vertical
-  // position is encoded in .x, not .y).
-  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
-  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
-  // "above shoulder" means smaller value on the head side, larger on feet side.
-  // headIsAtLowValue=true → smaller coord = higher up → wrist is up if vc(wrist) < vc(shoulder)
-  const isAbove = (wrist: { x: number; y: number }, shoulder: { x: number; y: number }) =>
-    headIsAtLowValue ? vc(wrist) < vc(shoulder) : vc(wrist) > vc(shoulder);
+  if (
+    !lAnkle || !rAnkle || !lShoulder || !rShoulder ||
+    (lAnkle.visibility ?? 0) < 0.25 ||
+    (rAnkle.visibility ?? 0) < 0.25
+  ) return -1;
 
-  const lUp = isAbove(lWrist, lShoulder) || isAbove(lElbow, lShoulder);
-  const rUp = isAbove(rWrist, rShoulder) || isAbove(rElbow, rShoulder);
-  return (lUp ? 1 : 0) + (rUp ? 1 : 0);
+  // Horizontal axis = perpendicular to the vertical axis
+  const { axis } = getVerticalAxis(landmarks);
+  const hc = (lm: { x: number; y: number }) => axis === 'x' ? lm.y : lm.x;
+
+  const shoulderWidth = Math.abs(hc(lShoulder) - hc(rShoulder));
+  if (shoulderWidth < 0.01) return -1; // degenerate
+
+  return Math.abs(hc(lAnkle) - hc(rAnkle)) / shoulderWidth;
 }
 
-function getLegSpread(landmarks: Landmark[]): number {
-  const lAnkle = landmarks[POSE.LEFT_ANKLE];
-  const rAnkle = landmarks[POSE.RIGHT_ANKLE];
-  const lHip = landmarks[POSE.LEFT_HIP];
-  const rHip = landmarks[POSE.RIGHT_HIP];
-  if (!lAnkle || !rAnkle || !lHip || !rHip) return 0;
+/**
+ * True when BOTH wrists are above their respective shoulders.
+ * Uses wrists only (not elbows) to require a clearly raised position.
+ */
+function areBothArmsRaised(landmarks: Landmark[]): boolean {
+  const lWrist   = landmarks[POSE.LEFT_WRIST];
+  const rWrist   = landmarks[POSE.RIGHT_WRIST];
+  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
+  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
+  if (!lWrist || !rWrist || !lShoulder || !rShoulder) return false;
+  if ((lWrist.visibility ?? 0) < 0.3 || (rWrist.visibility ?? 0) < 0.3) return false;
 
-  const hipWidth = Math.abs(rHip.x - lHip.x);
-  const ankleWidth = Math.abs(rAnkle.x - lAnkle.x);
-  return hipWidth > 0 ? ankleWidth / hipWidth : 0;
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
+  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
+  const aboveShoulder = (w: typeof lWrist, s: typeof lShoulder) =>
+    headIsAtLowValue ? vc(w) < vc(s) : vc(w) > vc(s);
+
+  return aboveShoulder(lWrist, lShoulder) && aboveShoulder(rWrist, rShoulder);
+}
+
+/**
+ * True when BOTH wrists are below their respective shoulders.
+ */
+function areBothArmsLowered(landmarks: Landmark[]): boolean {
+  const lWrist   = landmarks[POSE.LEFT_WRIST];
+  const rWrist   = landmarks[POSE.RIGHT_WRIST];
+  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
+  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
+  if (!lWrist || !rWrist || !lShoulder || !rShoulder) return false;
+  if ((lWrist.visibility ?? 0) < 0.3 || (rWrist.visibility ?? 0) < 0.3) return false;
+
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
+  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
+  const belowShoulder = (w: typeof lWrist, s: typeof lShoulder) =>
+    headIsAtLowValue ? vc(w) > vc(s) : vc(w) < vc(s);
+
+  return belowShoulder(lWrist, lShoulder) && belowShoulder(rWrist, rShoulder);
 }
 
 // ─── Lunge helpers ───────────────────────────────────────────────────────────
@@ -567,27 +610,36 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
 }
 
 // ─── Jumping Jack Detection ──────────────────────────────────────────────────
+//
+//  closed ──(arms up AND legs spread)──▶ open
+//  open   ──(arms down AND legs together)──▶ closed  (+1 rep)
+//
+//  OPEN  requires: both wrists above shoulders
+//                  AND ankles ≥ JJ_OPEN_LEG_RATIO × shoulder width
+//  CLOSED requires: both wrists below shoulders
+//                   AND ankles ≤ JJ_CLOSED_LEG_RATIO × shoulder width
+//
+//  When ankles are not visible (phone too close), leg check is skipped so
+//  the arms-only signal still works — but the state machine still demands a
+//  full open → closed cycle, preventing single-arm raises from counting.
+//
+//  The hysteresis gap between JJ_CLOSED_LEG_RATIO (0.9) and JJ_OPEN_LEG_RATIO
+//  (1.4) prevents mid-range ankle positions from flickering the state.
 
-function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
-  const armSpread = getArmSpread(_landmarks);
-  const legSpread = getLegSpread(_landmarks);
-  const anklesVisible = !!(
-    _landmarks[POSE.LEFT_ANKLE] && _landmarks[POSE.RIGHT_ANKLE] &&
-    (_landmarks[POSE.LEFT_ANKLE].visibility ?? 0) > 0.2 &&
-    (_landmarks[POSE.RIGHT_ANKLE].visibility ?? 0) > 0.2
-  );
+function detectJumpingJackPhase(landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
+  const armsUp     = areBothArmsRaised(landmarks);
+  const armsDown   = areBothArmsLowered(landmarks);
+  const legRatio   = getLegSpreadRatio(landmarks);   // -1 = not visible
+  const legsKnown  = legRatio >= 0;
 
-  // Arms-only mode when ankles aren't visible (common on phones)
-  // Require BOTH arms raised for open, at least one arm down for closed
-  const isOpen = anklesVisible
-    ? (armSpread >= 2 && legSpread > 1.05)
-    : (armSpread >= 2);
-  const isClosed = anklesVisible
-    ? (armSpread <= 1 && legSpread < 1.3)
-    : (armSpread <= 1);
+  // Full-body open: arms up AND legs spread enough
+  // Arms-only fallback when ankles are off-frame: just check arms
+  const isOpen   = armsUp   && (!legsKnown || legRatio >= JJ_OPEN_LEG_RATIO);
+  // Full-body closed: arms down AND feet together
+  const isClosed = armsDown && (!legsKnown || legRatio <= JJ_CLOSED_LEG_RATIO);
 
   if (state.phase === 'closed') {
-    state.feedback = 'Raise BOTH arms and jump out!';
+    state.feedback = 'Raise arms and jump out!';
     state.formQuality = 'neutral';
     if (isOpen) {
       state.phase = 'open';
@@ -598,7 +650,7 @@ function detectJumpingJackPhase(_landmarks: Landmark[], state: ExerciseState, ti
   }
 
   if (state.phase === 'open') {
-    state.feedback = 'Arms down and feet together!';
+    state.feedback = 'Arms down, feet together!';
     if (isClosed && timeSinceRep >= REP_COOLDOWN_MS) {
       state.repCount += 1;
       state._lastRepTime = now;
