@@ -13,7 +13,7 @@ import {
   WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
   getComboMultiplier, getComboLabel, CRIT_CHANCE, CRIT_MULTIPLIER,
-  getRank, getRepMessage,
+  getRank, getRepMessage, calculatePerformanceScore, RHYTHM_BONUS_MULTIPLIER,
 } from '@/lib/game-data';
 import { Button } from '@/components/ui/button';
 import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
@@ -54,6 +54,15 @@ export default function Battle() {
   const bestComboRef = useRef(0);
   const phaseTimeLeftRef = useRef(WORKOUT_PHASES[0].duration);
 
+  // Accuracy tracking
+  const [accuracy, setAccuracy] = useState(100);
+  const accuracyRef = useRef({ goodReps: 0, partialAttempts: 0 });
+  const prevPartialAttemptsRef = useRef(0);
+
+  // Rhythm tracking
+  const repTimestampsRef = useRef<number[]>([]);
+  const rhythmActiveRef = useRef(false);
+
   useEffect(() => {
     if (!gameActive || sessionOver || workoutComplete) return;
     const interval = setInterval(() => {
@@ -83,6 +92,9 @@ export default function Battle() {
             newExState._threshold = exerciseStateRef.current._threshold;
             exerciseStateRef.current = newExState;
             prevRepRef.current = 0;
+            prevPartialAttemptsRef.current = 0;
+            repTimestampsRef.current = [];
+            rhythmActiveRef.current = false;
             setDisplayState({ ...newExState });
             setPhaseTransition(null);
           }, 3000);
@@ -132,9 +144,41 @@ export default function Battle() {
     if (newState.calibrated && !gameActive) setGameActive(true);
 
     const isActive = gameActive || newState.calibrated;
+    // Track partial squat attempts for accuracy (before overwriting exerciseStateRef)
+    if (newState._partialAttempts > exerciseStateRef.current._partialAttempts) {
+      const delta = newState._partialAttempts - exerciseStateRef.current._partialAttempts;
+      accuracyRef.current.partialAttempts += delta;
+      prevPartialAttemptsRef.current = newState._partialAttempts;
+    }
+
     if (newState.repCount > prevRepRef.current && isActive) {
+      // ── Rhythm system ────────────────────────────────────────────────────
+      const repNow = Date.now();
+      const interval = repNow - lastRepTimeRef.current;
+      let rhythmMult = 1.0;
+      if (prevRepRef.current > 0 && interval > 0) {
+        const timestamps = [...repTimestampsRef.current, repNow].slice(-6);
+        repTimestampsRef.current = timestamps;
+        if (timestamps.length >= 4) {
+          const intervals = timestamps.slice(1).map((t, i) => t - timestamps[i]);
+          const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+          const variance = intervals.reduce((a, b) => a + (b - mean) ** 2, 0) / intervals.length;
+          const cv = Math.sqrt(variance) / mean;
+          const inRhythm = cv < 0.25 && mean >= 300 && mean <= 3000;
+          rhythmActiveRef.current = inRhythm;
+          if (inRhythm) rhythmMult = 1 + RHYTHM_BONUS_MULTIPLIER;
+        }
+      } else {
+        repTimestampsRef.current = [repNow];
+      }
+
       prevRepRef.current = newState.repCount;
-      lastRepTimeRef.current = Date.now();
+      lastRepTimeRef.current = repNow;
+
+      // ── Accuracy tracking ────────────────────────────────────────────────
+      accuracyRef.current.goodReps += 1;
+      const totalAttempts = accuracyRef.current.goodReps + accuracyRef.current.partialAttempts;
+      setAccuracy(Math.round((accuracyRef.current.goodReps / totalAttempts) * 100));
 
       const exType = newState.exerciseType;
       const baseDamage = DAMAGE_MAP[exType];
@@ -150,9 +194,9 @@ export default function Battle() {
 
       const critRoll = Math.random() < CRIT_CHANCE;
       const multiplier = getComboMultiplier(newStreak);
-      const damage = baseDamage * multiplier * (critRoll ? CRIT_MULTIPLIER : 1);
+      const damage = Math.round(baseDamage * multiplier * (critRoll ? CRIT_MULTIPLIER : 1) * rhythmMult);
 
-      setScore(s => s + BASE_POINTS_PER_REP * multiplier * (critRoll ? CRIT_MULTIPLIER : 1));
+      setScore(s => s + Math.round(BASE_POINTS_PER_REP * multiplier * (critRoll ? CRIT_MULTIPLIER : 1) * rhythmMult));
       setCoins(c => c + COINS_PER_REP * multiplier);
       setCalories(cal => +(cal + calPerRep).toFixed(1));
       setTotalReps(r => r + 1);
@@ -171,7 +215,7 @@ export default function Battle() {
       setIsHit(true);
       setDamageText(critRoll ? `💥 -${damage}` : `-${damage}`);
 
-      const msg = getRepMessage(damage, newStreak, critRoll, phaseTimeLeftRef.current);
+      const msg = getRepMessage(damage, newStreak, critRoll, phaseTimeLeftRef.current, rhythmMult > 1);
       if (gameMessageTimer.current) clearTimeout(gameMessageTimer.current);
       setGameMessage(msg);
       gameMessageTimer.current = setTimeout(() => setGameMessage(null), 1800);
@@ -220,7 +264,8 @@ export default function Battle() {
   useEffect(() => { handleStart(); }, [handleStart]);
 
   if (sessionOver) {
-    const rank = getRank(totalReps);
+    const performanceScore = calculatePerformanceScore(totalReps, accuracy, bestCombo);
+    const rank = getRank(performanceScore);
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
         <div className="game-panel p-8 max-w-sm w-full text-center slide-up">
@@ -228,9 +273,11 @@ export default function Battle() {
           <p className="font-pixel text-xs text-secondary game-text-shadow mb-1">{rank.label}</p>
           <h2 className="font-pixel text-lg text-foreground game-text-shadow mb-4">Workout Complete!</h2>
           <div className="space-y-2 mb-6">
+            <p className="font-body text-sm text-foreground">Performance: <span className="font-pixel text-secondary">{performanceScore}/100</span></p>
             <p className="font-body text-sm text-foreground">Score: <span className="font-pixel text-primary">{score}</span></p>
-            <p className="font-body text-sm text-foreground">Total Reps: <span className="font-pixel text-primary">{totalReps}</span></p>
-            <p className="font-body text-sm text-foreground">Total Damage: <span className="font-pixel text-destructive">{totalDamage}</span></p>
+            <p className="font-body text-sm text-foreground">Reps: <span className="font-pixel text-primary">{totalReps}</span></p>
+            <p className="font-body text-sm text-foreground">Accuracy: <span className="font-pixel text-primary">{accuracy}%</span></p>
+            <p className="font-body text-sm text-foreground">Damage: <span className="font-pixel text-destructive">{totalDamage}</span></p>
             <p className="font-body text-sm text-foreground">Best Combo: <span className="font-pixel text-secondary">x{bestCombo}</span></p>
             <p className="font-body text-sm text-foreground">Calories: <span className="font-pixel text-game-gold">{calories} kcal</span></p>
             <p className="font-body text-sm text-game-gold">+{coins}G earned!</p>

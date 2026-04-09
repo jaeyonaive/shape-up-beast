@@ -19,6 +19,9 @@ export const CALORIES_PER_SQUAT = 0.32;
 export const CRIT_CHANCE = 0.15;
 export const CRIT_MULTIPLIER = 2;
 
+// Rhythm bonus
+export const RHYTHM_BONUS_MULTIPLIER = 0.2;  // +20% damage/score when in rhythm
+
 // Combo system
 export const COMBO_TIMEOUT_MS = 4000;
 
@@ -30,14 +33,31 @@ export function getComboMultiplier(streak: number): number {
   return 1;
 }
 
-export function getRank(totalReps: number): { label: string; emoji: string } {
-  if (totalReps >= 20) return { label: 'BEAST', emoji: '🔥' };
-  if (totalReps >= 10) return { label: 'STRONG', emoji: '⚡' };
+/**
+ * Performance score 0–100 factoring reps, accuracy, and best combo.
+ *   repScore   = min(100, totalReps / 40 × 100)   — 40 reps across a session = max
+ *   comboScore = min(100, bestCombo / 8 × 100)    — combo ≥ 8 = max
+ *   accuracy   passed as 0–100
+ */
+export function calculatePerformanceScore(
+  totalReps: number,
+  accuracy: number,
+  bestCombo: number,
+): number {
+  const repScore   = Math.min(100, (totalReps / 40) * 100);
+  const comboScore = Math.min(100, (bestCombo / 8) * 100);
+  return Math.round(repScore * 0.5 + accuracy * 0.3 + comboScore * 0.2);
+}
+
+export function getRank(performanceScore: number): { label: string; emoji: string } {
+  if (performanceScore >= 70) return { label: 'BEAST', emoji: '🔥' };
+  if (performanceScore >= 40) return { label: 'STRONG', emoji: '⚡' };
   return { label: 'BEGINNER', emoji: '🌱' };
 }
 
-export function getRepMessage(damage: number, streak: number, isCrit: boolean, timeLeft: number): string {
+export function getRepMessage(damage: number, streak: number, isCrit: boolean, timeLeft: number, rhythmActive = false): string {
   if (isCrit) return `💥 CRITICAL HIT! -${damage} HP!`;
+  if (rhythmActive && streak >= 3) return `🎵 IN THE ZONE! -${damage}`;
   if (timeLeft <= 10) return `💪 FINAL PUSH! -${damage}`;
   if (streak >= 10) return `🔥 x${streak} UNSTOPPABLE! -${damage}`;
   if (streak >= 5) return `⚡ Combo x${streak}! -${damage}`;
