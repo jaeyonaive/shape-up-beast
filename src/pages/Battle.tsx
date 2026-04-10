@@ -8,7 +8,6 @@ import {
   createExerciseState, detectExercise, DAMAGE_MAP, CALORIES_PER_REP,
   type ExerciseState,
 } from '@/lib/exercise-detection';
-import { PhaseTransitionOverlay } from '@/components/game/PhaseTransitionOverlay';
 import {
   WORKOUT_PHASES, MONSTER_MAX_HP, loadGameState, saveGameState,
   BASE_POINTS_PER_REP, COINS_PER_REP, COMBO_TIMEOUT_MS,
@@ -22,7 +21,6 @@ export default function Battle() {
   const navigate = useNavigate();
   const { landmarks, isLoading, error, cameraActive, cameraStatus, startCamera, stopCamera, videoRef } = usePoseDetection();
 
-  const [phaseIndex, setPhaseIndex] = useState(0);
   const [phaseTimeLeft, setPhaseTimeLeft] = useState(WORKOUT_PHASES[0].duration);
   const [workoutComplete, setWorkoutComplete] = useState(false);
 
@@ -44,7 +42,6 @@ export default function Battle() {
   const [gameActive, setGameActive] = useState(false);
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
-  const [phaseTransition, setPhaseTransition] = useState<{ label: string; emoji: string } | null>(null);
 
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
   const [displayState, setDisplayState] = useState<ExerciseState>(exerciseStateRef.current);
@@ -69,42 +66,14 @@ export default function Battle() {
       setPhaseTimeLeft(t => {
         phaseTimeLeftRef.current = t - 1;
         if (t <= 1) {
-          const nextIdx = phaseIndex + 1;
-          if (nextIdx >= WORKOUT_PHASES.length) {
-            setWorkoutComplete(true);
-            return 0;
-          }
-          const nextPhase = WORKOUT_PHASES[nextIdx];
-          setPhaseTransition({ label: nextPhase.label, emoji: nextPhase.emoji });
-          setTimeout(() => {
-            setPhaseIndex(nextIdx);
-            const newExState = createExerciseState(nextPhase.exercise);
-            newExState.calibrated = true;
-            newExState.bodyDetected = true;
-            newExState.calibrationProgress = 100;
-            switch (nextPhase.exercise) {
-              case 'squats': newExState.phase = 'standing'; break;
-              case 'jumping_jacks': newExState.phase = 'closed'; break;
-              case 'lunges': newExState.phase = 'lunge_standing'; break;
-            }
-            newExState._standingHipY = exerciseStateRef.current._standingHipY;
-            newExState._squatHipY = exerciseStateRef.current._squatHipY;
-            newExState._threshold = exerciseStateRef.current._threshold;
-            exerciseStateRef.current = newExState;
-            prevRepRef.current = 0;
-            prevPartialAttemptsRef.current = 0;
-            repTimestampsRef.current = [];
-            rhythmActiveRef.current = false;
-            setDisplayState({ ...newExState });
-            setPhaseTransition(null);
-          }, 3000);
-          return nextPhase.duration;
+          setWorkoutComplete(true);
+          return 0;
         }
         return t - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [gameActive, sessionOver, workoutComplete, phaseIndex]);
+  }, [gameActive, sessionOver, workoutComplete]);
 
   useEffect(() => {
     if (workoutComplete && !sessionOver) handleEndSession();
@@ -380,9 +349,6 @@ export default function Battle() {
         <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
       </div>
 
-      {phaseTransition && (
-        <PhaseTransitionOverlay emoji={phaseTransition.emoji} label={phaseTransition.label} />
-      )}
     </div>
   );
 }

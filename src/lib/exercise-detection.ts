@@ -2,13 +2,11 @@ import { type Landmark, POSE, calculateAngle } from './pose-detection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type ExerciseType = 'squats' | 'jumping_jacks' | 'lunges';
+export type ExerciseType = 'squats';
 
 export type ExercisePhase =
   | 'waiting' | 'calibrating' | 'calibrating_squat'
-  | 'standing' | 'descending' | 'at_bottom' | 'ascending' | 'cooldown'  // squats
-  | 'closed' | 'opening' | 'open' | 'closing'                           // jumping jacks
-  | 'lunge_standing' | 'lunge_down' | 'lunge_returning';                 // lunges
+  | 'standing' | 'descending' | 'at_bottom' | 'ascending' | 'cooldown';
 
 export interface ExerciseState {
   exerciseType: ExerciseType;
@@ -44,13 +42,6 @@ export interface ExerciseState {
   _peakHipY: number;
   _adaptiveHistory: number[];
 
-  // JJ-specific
-  _jjArmThreshold: number;
-  _jjLegThreshold: number;
-
-  // Lunge-specific
-  _lungeKneeThreshold: number;
-  _lastLungeLeg: 'left' | 'right';
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -80,20 +71,14 @@ const PERFECT_REP_DEPTH_RATIO = 1.3;   // depthRatio ≥ 1.3 = "PERFECT REP"
 // Damage per exercise
 export const DAMAGE_MAP: Record<ExerciseType, number> = {
   squats: 8,
-  jumping_jacks: 5,
-  lunges: 12,
 };
 
 export const EXERCISE_LABELS: Record<ExerciseType, string> = {
   squats: 'Squats',
-  jumping_jacks: 'Jumping Jacks',
-  lunges: 'Lunges',
 };
 
 export const CALORIES_PER_REP: Record<ExerciseType, number> = {
   squats: 0.32,
-  jumping_jacks: 0.15,
-  lunges: 0.4,
 };
 
 // ─── Initialization ──────────────────────────────────────────────────────────
@@ -126,10 +111,6 @@ export function createExerciseState(exerciseType: ExerciseType): ExerciseState {
     _partialAttempts: 0,
     _peakHipY: 0,
     _adaptiveHistory: [],
-    _jjArmThreshold: 0,
-    _jjLegThreshold: 0,
-    _lungeKneeThreshold: 0,
-    _lastLungeLeg: 'left',
   };
 }
 
@@ -224,117 +205,6 @@ function smoothY(history: number[], newVal: number): { smoothed: number; history
   const prev = history.length > 0 ? history[history.length - 1] : newVal;
   const smoothed = prev + SMOOTHING_ALPHA * (newVal - prev);
   return { smoothed, history: [smoothed] };
-}
-
-// ─── Jumping Jack helpers ────────────────────────────────────────────────────
-
-// ─── Jumping Jack constants ───────────────────────────────────────────────────
-
-/** Ankle spread / shoulder width ratio that defines the OPEN position. */
-const JJ_OPEN_LEG_RATIO   = 1.4;  // ankles ≥ 1.4× shoulder width → legs open
-/** Ankle spread / shoulder width ratio that defines the CLOSED position.
- *  The gap between CLOSED (0.9) and OPEN (1.4) gives hysteresis so a single
- *  noisy frame cannot flip the state. */
-const JJ_CLOSED_LEG_RATIO = 0.9;  // ankles ≤ 0.9× shoulder width → legs closed
-
-// ─── Jumping Jack helpers ─────────────────────────────────────────────────────
-
-/**
- * Ankle spread normalised to shoulder width using the orientation-aware
- * HORIZONTAL axis (perpendicular to vertical), so it works for both portrait
- * and landscape camera frames.
- *
- * Returns -1 when ankle landmarks are not reliably visible.
- */
-function getLegSpreadRatio(landmarks: Landmark[]): number {
-  const lAnkle   = landmarks[POSE.LEFT_ANKLE];
-  const rAnkle   = landmarks[POSE.RIGHT_ANKLE];
-  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
-  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
-
-  if (
-    !lAnkle || !rAnkle || !lShoulder || !rShoulder ||
-    (lAnkle.visibility ?? 0) < 0.25 ||
-    (rAnkle.visibility ?? 0) < 0.25
-  ) return -1;
-
-  // Horizontal axis = perpendicular to the vertical axis
-  const { axis } = getVerticalAxis(landmarks);
-  const hc = (lm: { x: number; y: number }) => axis === 'x' ? lm.y : lm.x;
-
-  const shoulderWidth = Math.abs(hc(lShoulder) - hc(rShoulder));
-  if (shoulderWidth < 0.01) return -1; // degenerate
-
-  return Math.abs(hc(lAnkle) - hc(rAnkle)) / shoulderWidth;
-}
-
-/**
- * True when BOTH wrists are above their respective shoulders.
- * Uses wrists only (not elbows) to require a clearly raised position.
- */
-function areBothArmsRaised(landmarks: Landmark[]): boolean {
-  const lWrist   = landmarks[POSE.LEFT_WRIST];
-  const rWrist   = landmarks[POSE.RIGHT_WRIST];
-  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
-  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
-  if (!lWrist || !rWrist || !lShoulder || !rShoulder) return false;
-  if ((lWrist.visibility ?? 0) < 0.3 || (rWrist.visibility ?? 0) < 0.3) return false;
-
-  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
-  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
-  const aboveShoulder = (w: typeof lWrist, s: typeof lShoulder) =>
-    headIsAtLowValue ? vc(w) < vc(s) : vc(w) > vc(s);
-
-  return aboveShoulder(lWrist, lShoulder) && aboveShoulder(rWrist, rShoulder);
-}
-
-/**
- * True when BOTH wrists are below their respective shoulders.
- */
-function areBothArmsLowered(landmarks: Landmark[]): boolean {
-  const lWrist   = landmarks[POSE.LEFT_WRIST];
-  const rWrist   = landmarks[POSE.RIGHT_WRIST];
-  const lShoulder = landmarks[POSE.LEFT_SHOULDER];
-  const rShoulder = landmarks[POSE.RIGHT_SHOULDER];
-  if (!lWrist || !rWrist || !lShoulder || !rShoulder) return false;
-  if ((lWrist.visibility ?? 0) < 0.3 || (rWrist.visibility ?? 0) < 0.3) return false;
-
-  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
-  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
-  const belowShoulder = (w: typeof lWrist, s: typeof lShoulder) =>
-    headIsAtLowValue ? vc(w) > vc(s) : vc(w) < vc(s);
-
-  return belowShoulder(lWrist, lShoulder) && belowShoulder(rWrist, rShoulder);
-}
-
-// ─── Lunge helpers ───────────────────────────────────────────────────────────
-
-function getFrontKneeAngle(landmarks: Landmark[], side: 'left' | 'right'): number {
-  if (side === 'left') {
-    return calculateAngle(
-      landmarks[POSE.LEFT_HIP],
-      landmarks[POSE.LEFT_KNEE],
-      landmarks[POSE.LEFT_ANKLE]
-    );
-  }
-  return calculateAngle(
-    landmarks[POSE.RIGHT_HIP],
-    landmarks[POSE.RIGHT_KNEE],
-    landmarks[POSE.RIGHT_ANKLE]
-  );
-}
-
-function detectLungeSide(landmarks: Landmark[]): 'left' | 'right' | null {
-  const lKnee = landmarks[POSE.LEFT_KNEE];
-  const rKnee = landmarks[POSE.RIGHT_KNEE];
-  if (!lKnee || !rKnee) return null;
-  // Use the orientation-aware vertical coordinate (knee that is lower down = lunge leg)
-  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
-  const vc = (lm: { x: number; y: number }) => axis === 'x' ? lm.x : lm.y;
-  // Lower down = larger value when headIsAtLowValue, smaller when !headIsAtLowValue
-  return headIsAtLowValue
-    ? (vc(lKnee) > vc(rKnee) ? 'left' : 'right')
-    : (vc(lKnee) < vc(rKnee) ? 'left' : 'right');
 }
 
 function hasKneesVisible(landmarks: Landmark[]): boolean {
@@ -489,39 +359,15 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
     state.calibrationProgress = 100;
     state.formQuality = 'good';
 
-    switch (state.exerciseType) {
-      case 'squats': state.phase = 'standing'; state.feedback = 'GO! Squat!'; break;
-      case 'jumping_jacks': state.phase = 'closed'; state.feedback = 'GO! Jump!'; break;
-      case 'lunges': state.phase = 'lunge_standing'; state.feedback = 'GO! Lunge!'; break;
-    }
+    state.phase = 'standing';
+    state.feedback = 'GO! Squat!';
     return state;
   }
 
   // ═══ GAMEPLAY ═══
   const timeSinceRep = now - prevState._lastRepTime;
-
-  switch (prevState.exerciseType) {
-    case 'squats':
-      return detectSquatPhase(landmarks, state, smoothedHipY, timeSinceRep, now);
-    case 'jumping_jacks':
-      return detectJumpingJackPhase(landmarks, state, timeSinceRep, now);
-    case 'lunges':
-      return detectLungePhase(landmarks, state, timeSinceRep, now);
-  }
+  return detectSquatPhase(landmarks, state, smoothedHipY, timeSinceRep, now);
 }
-
-// ─── Squat Detection — 3-state machine ──────────────────────────────────────
-//
-//  standing ──(hips drop AND knees bend)──▶ at_bottom
-//  at_bottom ──(hips return to upThreshold)──▶ cooldown  (+1 rep)
-//  cooldown ──(REP_COOLDOWN_MS elapsed)──▶ standing
-//
-// DUAL CONDITION to enter at_bottom prevents false positives:
-//   1. Hip drops ≥ SQUAT_DOWN_FRACTION of calibrated range
-//      AND ≥ SQUAT_MIN_ABSOLUTE_DROP fraction of body height
-//   2. Knee angle ≤ SQUAT_KNEE_ANGLE_DOWN  (knees are actually bent)
-// Lateral shuffles / swaying set off the hip sensor but leave the knees
-// straight, so they are cleanly rejected by condition 2.
 
 /**
  * Average knee angle (hip→knee→ankle) across whichever legs are visible.
@@ -667,109 +513,3 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   return state;
 }
 
-// ─── Jumping Jack Detection ──────────────────────────────────────────────────
-//
-//  closed ──(arms up AND legs spread)──▶ open
-//  open   ──(arms down AND legs together)──▶ closed  (+1 rep)
-//
-//  OPEN  requires: both wrists above shoulders
-//                  AND ankles ≥ JJ_OPEN_LEG_RATIO × shoulder width
-//  CLOSED requires: both wrists below shoulders
-//                   AND ankles ≤ JJ_CLOSED_LEG_RATIO × shoulder width
-//
-//  When ankles are not visible (phone too close), leg check is skipped so
-//  the arms-only signal still works — but the state machine still demands a
-//  full open → closed cycle, preventing single-arm raises from counting.
-//
-//  The hysteresis gap between JJ_CLOSED_LEG_RATIO (0.9) and JJ_OPEN_LEG_RATIO
-//  (1.4) prevents mid-range ankle positions from flickering the state.
-
-function detectJumpingJackPhase(landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
-  const armsUp     = areBothArmsRaised(landmarks);
-  const armsDown   = areBothArmsLowered(landmarks);
-  const legRatio   = getLegSpreadRatio(landmarks);   // -1 = not visible
-  const legsKnown  = legRatio >= 0;
-
-  // Full-body open: arms up AND legs spread enough
-  // Arms-only fallback when ankles are off-frame: just check arms
-  const isOpen   = armsUp   && (!legsKnown || legRatio >= JJ_OPEN_LEG_RATIO);
-  // Full-body closed: arms down AND feet together
-  const isClosed = armsDown && (!legsKnown || legRatio <= JJ_CLOSED_LEG_RATIO);
-
-  if (state.phase === 'closed') {
-    state.feedback = 'Raise arms and jump out!';
-    state.formQuality = 'neutral';
-    if (isOpen) {
-      state.phase = 'open';
-      state.feedback = 'Arms up! Now close!';
-      state.formQuality = 'good';
-    }
-    return state;
-  }
-
-  if (state.phase === 'open') {
-    state.feedback = 'Arms down, feet together!';
-    if (isClosed && timeSinceRep >= REP_COOLDOWN_MS) {
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state.phase = 'closed';
-      state.feedback = `Rep ${state.repCount}!`;
-      state.formQuality = 'good';
-    }
-    return state;
-  }
-
-  state.phase = 'closed';
-  return state;
-}
-
-// ─── Lunge Detection ─────────────────────────────────────────────────────────
-
-function detectLungePhase(landmarks: Landmark[], state: ExerciseState, timeSinceRep: number, now: number): ExerciseState {
-  const lungeSide = detectLungeSide(landmarks);
-  const kneeAngle = lungeSide ? getFrontKneeAngle(landmarks, lungeSide) : 180;
-  const isLunging = kneeAngle < 130;
-  const isStanding = kneeAngle > 155;
-
-  if (state.phase === 'lunge_standing') {
-    state.feedback = 'Tracking active';
-    state.formQuality = 'neutral';
-    if (isLunging) {
-      state.phase = 'lunge_down';
-      state._lastLungeLeg = lungeSide || 'left';
-      state.feedback = 'Lunge down!';
-      state.formQuality = 'good';
-    }
-    return state;
-  }
-
-  if (state.phase === 'lunge_down') {
-    if (isStanding && timeSinceRep >= REP_COOLDOWN_MS) {
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state.phase = 'lunge_standing';
-      state.feedback = `Rep ${state.repCount}!`;
-      state.formQuality = 'good';
-    } else if (isLunging) {
-      state.feedback = 'Hold... come back up!';
-    }
-    return state;
-  }
-
-  if (state.phase === 'lunge_returning') {
-    if (isStanding && timeSinceRep >= REP_COOLDOWN_MS) {
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state.phase = 'lunge_standing';
-      state.feedback = `Rep ${state.repCount}!`;
-      state.formQuality = 'good';
-    }
-    return state;
-  }
-
-  if (!['lunge_standing', 'lunge_down', 'lunge_returning'].includes(state.phase)) {
-    state.phase = 'lunge_standing';
-  }
-
-  return state;
-}
