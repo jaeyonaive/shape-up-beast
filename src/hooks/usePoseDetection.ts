@@ -6,11 +6,11 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 // ── Tuning constants ──────────────────────────────────────────────────────────
 
 /**
- * Minimum visibility score required at both shoulders AND both hips before we
- * accept a detection result.  0.4 rejects clothing / partial occlusion while
- * still accepting slightly-lit subjects.
+ * Minimum visibility score required at shoulders, hips AND knees before we
+ * accept a detection result. 0.6 rejects hands/objects and partial occlusion
+ * while still accepting normally-lit subjects.
  */
-const CORE_VISIBILITY_THRESHOLD = 0.4;
+const CORE_VISIBILITY_THRESHOLD = 0.6;
 
 /**
  * EMA blending factor for landmark smoothing.
@@ -40,7 +40,7 @@ type CameraStatus =
  * downstream exercise logic should not run.
  */
 function hasStableCorePose(pts: Landmark[]): boolean {
-  return [11, 12, 23, 24].every(
+  return [11, 12, 23, 24, 25, 26].every(
     i => (pts[i]?.visibility ?? 0) >= CORE_VISIBILITY_THRESHOLD,
   );
 }
