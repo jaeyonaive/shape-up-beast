@@ -3,12 +3,8 @@ import monsterTutorial from '@/assets/monster-tutorial.png';
 import monsterBoss from '@/assets/monster-boss.png';
 
 // ─── Defeat video ─────────────────────────────────────────────────────────────
-// To enable: add  src/assets/DEFATED_ANIMATION.mp4  to the repo, then:
-//   1. Replace the null line below with:
-//        import defeatVideoSrc from '@/assets/DEFATED_ANIMATION.mp4';
-//   2. Change the const to:
-//        const defeatVideo: string = defeatVideoSrc;
-const defeatVideo: string | null = null;
+import defeatVideoSrc from '@/assets/DEFATED ANIMATION.mp4';
+const defeatVideo: string = defeatVideoSrc;
 // ─────────────────────────────────────────────────────────────────────────────
 
 const monsterImages: Record<string, string> = {
