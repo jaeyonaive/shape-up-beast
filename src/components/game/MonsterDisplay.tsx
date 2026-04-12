@@ -1,11 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import monsterTutorial from '@/assets/monster-tutorial.png';
 import monsterBoss from '@/assets/monster-boss.png';
 
-// ─── Defeat video ─────────────────────────────────────────────────────────────
 import defeatVideoSrc from '@/assets/DEFATED ANIMATION.mp4';
-const defeatVideo: string = defeatVideoSrc;
-// ─────────────────────────────────────────────────────────────────────────────
 
 const monsterImages: Record<string, string> = {
   'monster-tutorial': monsterTutorial,
@@ -20,7 +17,7 @@ interface MonsterDisplayProps {
   isDefeated: boolean;
 }
 
-type DefeatStage = 'none' | 'impact' | 'fall';
+type DefeatStage = 'none' | 'impact' | 'video' | 'fall';
 
 const IMPACT_MS = 200;
 
@@ -28,11 +25,11 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated 
   const [hitAnim,     setHitAnim]     = useState(false);
   const [critAnim,    setCritAnim]    = useState(false);
   const [defeatStage, setDefeatStage] = useState<DefeatStage>('none');
-  const [showVideo,   setShowVideo]   = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // ── Regular hit / crit ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (isDefeated) return; // defeat sequence takes priority
+    if (isDefeated) return;
     if (!isHit) return;
     if (isCrit) {
       setCritAnim(true);
@@ -46,61 +43,75 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated 
   }, [isHit, isCrit, isDefeated]);
 
   // ── Defeat sequence ─────────────────────────────────────────────────────────
-  //   200 ms  →  impact flash + hard shake
-  //   then    →  video (if available) OR CSS collapse fall
+  //
+  //  impact (200ms)  →  video plays  →  fall (700ms CSS)
+  //
+  //  The video element is always mounted (display:none when not playing) so it
+  //  can be preloaded and avoids a flash of the old frame on first play.
   useEffect(() => {
     if (!isDefeated) {
       setDefeatStage('none');
-      setShowVideo(false);
       return;
     }
 
     setDefeatStage('impact');
 
     const t = setTimeout(() => {
-      if (defeatVideo) {
-        setShowVideo(true);
-        setDefeatStage('none'); // hide sprite while video plays
-      } else {
-        setDefeatStage('fall');
+      setDefeatStage('video');
+      // Restart from the beginning in case the monster was defeated before
+      if (videoRef.current) {
+        videoRef.current.currentTime = 0;
+        videoRef.current.play().catch(() => {/* autoplay blocked — fall through */});
       }
     }, IMPACT_MS);
 
     return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDefeated]);
 
-  // ── Animation class ────────────────────────────────────────────────────────
+  // ── Animation class for the sprite ────────────────────────────────────────
   const idleClass = hpPercent < 30 ? 'monster-low-hp' : 'monster-float';
 
-  let animClass: string;
-  if      (defeatStage === 'impact') animClass = 'monster-defeat-impact';
-  else if (defeatStage === 'fall')   animClass = 'monster-defeat-fall';
-  else if (showVideo)                animClass = 'opacity-0 pointer-events-none';
-  else if (critAnim)                 animClass = 'monster-crit';
-  else if (hitAnim)                  animClass = 'monster-hit';
-  else                               animClass = idleClass;
+  let spriteClass: string;
+  if      (defeatStage === 'impact') spriteClass = 'monster-defeat-impact';
+  else if (defeatStage === 'video')  spriteClass = 'opacity-0 pointer-events-none';
+  else if (defeatStage === 'fall')   spriteClass = 'monster-defeat-fall';
+  else if (critAnim)                 spriteClass = 'monster-crit';
+  else if (hitAnim)                  spriteClass = 'monster-hit';
+  else                               spriteClass = idleClass;
+
+  // Scale up the whole monster during the defeat moment for visual emphasis
+  const wrapperStyle: React.CSSProperties =
+    defeatStage !== 'none'
+      ? { transform: 'scale(1.15)', transition: 'transform 0.15s ease-out' }
+      : { transition: 'transform 0.3s ease-in' };
 
   return (
-    <div className="pointer-events-none relative flex items-center justify-center">
+    <div className="pointer-events-none relative flex items-center justify-center" style={wrapperStyle}>
+      {/* Monster sprite */}
       <img
         src={monsterImages[imageKey]}
         alt="Monster"
-        className={`w-80 h-80 object-contain drop-shadow-2xl ${animClass}`}
+        className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
       />
 
-      {/* Defeat video — activates automatically once the asset is imported above */}
-      {defeatVideo && showVideo && (
-        <video
-          key="defeat"
-          src={defeatVideo}
-          autoPlay
-          muted
-          playsInline
-          className="absolute inset-0 w-full h-full object-contain"
-          onEnded={() => setShowVideo(false)}
-        />
-      )}
+      {/* Defeat video
+          mix-blend-mode: multiply removes the white background by blending
+          white areas with whatever is behind — the forest background shows through.
+          "true" fix = a video with alpha channel (WebM/APNG).               */}
+      <video
+        ref={videoRef}
+        src={defeatVideoSrc}
+        muted
+        playsInline
+        preload="auto"
+        className="absolute inset-0 w-full h-full object-contain"
+        style={{
+          display:      defeatStage === 'video' ? 'block' : 'none',
+          mixBlendMode: 'multiply',
+          background:   'transparent',
+        }}
+        onEnded={() => setDefeatStage('fall')}
+      />
     </div>
   );
 }

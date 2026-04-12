@@ -195,7 +195,7 @@ export default function Battle() {
 
   useEffect(() => {
     if (monsterDefeated) {
-      setTimeout(() => { setMonsterHP(MONSTER_MAX_HP); setMonsterDefeated(false); }, 1500);
+      setTimeout(() => { setMonsterHP(MONSTER_MAX_HP); setMonsterDefeated(false); }, 2500);
     }
   }, [monsterDefeated]);
 
@@ -320,10 +320,10 @@ export default function Battle() {
         </div>
       )}
 
-      {/* DEFEATED overlay — delayed 200 ms to coincide with end of impact flash */}
+      {/* DEFEATED overlay — delayed 300 ms to land after impact flash */}
       {monsterDefeated && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40"
-             style={{ animation: 'fadeIn 0.3s ease-out 0.2s both' }}>
+             style={{ animation: 'fadeIn 0.4s ease-out 0.3s both' }}>
           <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
         </div>
       )}
