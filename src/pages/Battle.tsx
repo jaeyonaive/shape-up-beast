@@ -305,7 +305,7 @@ export default function Battle() {
       </div>
 
       <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} hpPercent={hpPercent} isCrit={isCrit} />
+        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} hpPercent={hpPercent} isCrit={isCrit} isDefeated={monsterDefeated} />
       </div>
 
       {damageText && (
@@ -320,8 +320,10 @@ export default function Battle() {
         </div>
       )}
 
+      {/* DEFEATED overlay — delayed 200 ms to coincide with end of impact flash */}
       {monsterDefeated && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40">
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40"
+             style={{ animation: 'fadeIn 0.3s ease-out 0.2s both' }}>
           <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
         </div>
       )}
