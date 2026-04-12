@@ -69,8 +69,10 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
   // Play the video once the DOM has rendered it visible (defeatStage === 'video')
   useEffect(() => {
     if (defeatStage !== 'video' || !videoRef.current) return;
-    videoRef.current.currentTime = 0;
-    videoRef.current.play().catch(() => {
+    const v = videoRef.current;
+    v.currentTime  = 0;
+    v.playbackRate = 0.75;          // slower → more impactful
+    v.play().catch(() => {
       // Autoplay blocked or format unsupported — fall through to CSS animation
       setDefeatStage('fall');
       setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
@@ -110,16 +112,28 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
         className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
       />
 
-      {/* Defeat video — WebM with alpha channel, always mounted for reliable preload + play */}
+      {/* Defeat video — mix-blend-mode:screen removes black background */}
       <video
         ref={videoRef}
         src={defeatVideoSrc}
         muted
         playsInline
         preload="auto"
-        className="absolute inset-0 w-full h-full object-contain"
+        className="absolute"
         style={{
+          // Centre and scale up so the effect is visually dominant
+          left:      '50%',
+          top:       '50%',
+          width:     '100%',
+          height:    '100%',
+          objectFit: 'contain',
+          transform: 'translate(-50%, -50%) scale(1.25)',
+          // Screen blend removes the black background frame around the animation
+          mixBlendMode: 'screen',
+          background:   'transparent',
+          // Visibility toggle
           opacity:       defeatStage === 'video' ? 1 : 0,
+          zIndex:        defeatStage === 'video' ? 50 : -1,
           pointerEvents: 'none',
         }}
         onEnded={handleVideoEnded}

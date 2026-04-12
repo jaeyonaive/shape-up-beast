@@ -172,12 +172,12 @@
   100% { transform: translateX(0)    scale(1);    filter: brightness(1)  saturate(1); }
 }
 
-/* Stage 2 (700 ms): monster collapses — fall, shrink, fade */
+/* Stage 2 (700 ms): monster collapses — fall, shrink, fade — no rotation */
 @keyframes monsterDefeatFall {
-  0%   { opacity: 1;   transform: translateY(0px)   scale(1)    rotate(0deg);  filter: brightness(1); }
-  20%  { opacity: 0.9; transform: translateY(8px)   scale(0.98) rotate(4deg);  filter: brightness(1.5) saturate(0.5); }
-  60%  { opacity: 0.4; transform: translateY(30px)  scale(0.85) rotate(10deg); filter: brightness(0.6) saturate(0); }
-  100% { opacity: 0;   transform: translateY(55px)  scale(0.7)  rotate(14deg); filter: brightness(0)  saturate(0); }
+  0%   { opacity: 1;   transform: translateY(0px)  scale(1);    filter: brightness(1); }
+  20%  { opacity: 0.9; transform: translateY(8px)  scale(0.98); filter: brightness(1.5) saturate(0.5); }
+  60%  { opacity: 0.4; transform: translateY(30px) scale(0.85); filter: brightness(0.6) saturate(0); }
+  100% { opacity: 0;   transform: translateY(55px) scale(0.7);  filter: brightness(0)  saturate(0); }
 }
 
 .monster-defeat-impact {
