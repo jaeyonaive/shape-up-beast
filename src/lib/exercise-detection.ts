@@ -61,16 +61,18 @@ const MIN_HIP_TO_KNEE = 0.06;         // sanity guard: rejects tiny/invalid cali
 // ── Adaptive squat ratios (expressed as fractions of _baselineHipToKnee) ────
 //
 //   _baselineHipToKnee ≈ 0.15–0.25 in normalised frame coordinates.
-//   hipDrop > hipToKnee × 0.50  →  user is "at bottom" of squat
-//   kneeShift > hipToKnee × 0.20  →  knees moved (squat, not lean)
-//   hipDrop < hipToKnee × 0.15  →  user is "standing" (rep counted on this return)
+//   hipDrop > hipToKnee × 0.30  →  user is "at bottom" (primary gate)
+//   kneeShift > hipToKnee × 0.08  →  soft knee check (easily met)
+//   hipDrop > hipToKnee × 0.35  →  override: pass even if knee check fails
+//   hipDrop < hipToKnee × 0.08  →  user is "standing" (rep counted on return)
 //
-const SQUAT_DOWN_RATIO = 0.50;        // primary gate: hip dropped ≥ 50 % of hipToKnee
-const SQUAT_KNEE_SHIFT_RATIO = 0.20;  // secondary gate: knee shifted ≥ 20 % of hipToKnee
-const SQUAT_UP_RATIO = 0.15;          // "returned to standing": drop < 15 % of hipToKnee
+const SQUAT_DOWN_RATIO = 0.30;        // primary gate: hip dropped ≥ 30 % of hipToKnee
+const SQUAT_KNEE_SHIFT_RATIO = 0.08;  // soft secondary gate: knee shifted ≥ 8 % of hipToKnee
+const SQUAT_HIP_OVERRIDE_RATIO = 0.35; // override: bypass knee check when hip drop is unambiguous
+const SQUAT_UP_RATIO = 0.08;          // "returned to standing": drop < 8 % of hipToKnee
 
-const SQUAT_DOWN_RATIO_MIN = 0.40;    // adaptive lower bound (easier)
-const SQUAT_DOWN_RATIO_MAX = 0.65;    // adaptive upper bound (harder)
+const SQUAT_DOWN_RATIO_MIN = 0.22;    // adaptive lower bound (easier)
+const SQUAT_DOWN_RATIO_MAX = 0.45;    // adaptive upper bound (harder)
 const ADAPTIVE_STEP = 0.02;           // ratio change per rep-depth check
 
 const PARTIAL_DESCENT_FRACTION = 0.30; // fraction of down-threshold → partial descent started
@@ -357,13 +359,15 @@ export function detectExercise(landmarks: Landmark[], prevState: ExerciseState):
 
 // ─── Squat phase state machine ────────────────────────────────────────────────
 //
-//  standing ──(hipsLow && kneesShifted, 2 frames)──▶ at_bottom
-//  at_bottom ──(hips returned, 2 frames)──▶ cooldown (+1 rep)
+//  standing ──(isSquatting, 2 frames)──▶ at_bottom
+//  at_bottom ──(hipsUp, 2 frames)──▶ cooldown (+1 rep)
 //  cooldown  ──(500 ms elapsed)──▶ standing
 //
-//  Primary gate:   hipDrop > hipToKnee × squatDownRatio  (~50 % of anatomical gap)
-//  Secondary gate: kneeShift > hipToKnee × 0.20          (confirms real squat motion)
-//  Up condition:   hipDrop < hipToKnee × 0.15            (returned near standing)
+//  Primary gate:   hipDrop > hipToKnee × 0.30  (30 % of anatomical gap)
+//  Soft secondary: kneeShift > hipToKnee × 0.08  OR  hipDrop > hipToKnee × 0.35
+//                  — the override means a clear hip drop always counts even if
+//                    knee tracking is noisy or partial
+//  Up condition:   hipDrop < hipToKnee × 0.08  (within 8 % of standing)
 
 function detectSquatPhase(
   landmarks: Landmark[],
@@ -378,12 +382,15 @@ function detectSquatPhase(
   const hipDrop   = smoothedHipY  - state._standingHipY;
   const kneeShift = smoothedKneeY - state._baselineKneeY;
 
-  // Down: hip dropped at least squatDownRatio × hipToKnee
+  // Primary gate: hip dropped ≥ 30 % of the user's hip-to-knee gap
   const hipsLow = hipDrop >= hipToKnee * state._squatDownRatio;
-  // Secondary: knee also shifted (distinguishes squat from lean/tilt)
-  // Only applied when knee data is valid; if not available, pass through.
+  // Soft secondary: knee shifted ≥ 8 % of hipToKnee (very easy to satisfy)
+  // Pass-through when knee data is unavailable (smoothedKneeY < 0).
   const kneesShifted = smoothedKneeY < 0 || kneeShift >= hipToKnee * SQUAT_KNEE_SHIFT_RATIO;
-  // Up: hip has returned within 15 % of hipToKnee from standing
+  // Override: a large hip drop (≥ 35 %) counts even if the knee check fails —
+  // guards against noisy knee tracking blocking an obvious squat.
+  const hipOverride = hipDrop >= hipToKnee * SQUAT_HIP_OVERRIDE_RATIO;
+  // Up: hip returned to within 8 % of standing hip position
   const hipsUp = hipDrop < hipToKnee * SQUAT_UP_RATIO;
 
   // Lateral drift guard
@@ -391,7 +398,7 @@ function detectSquatPhase(
   const hasDrifted = state._baselineShoulderMid >= 0 &&
     Math.abs(shoulderMidH - state._baselineShoulderMid) > LATERAL_DRIFT_THRESHOLD;
 
-  const isSquatting = hipsLow && kneesShifted && !hasDrifted;
+  const isSquatting = hipsLow && (kneesShifted || hipOverride) && !hasDrifted;
 
   const phase = state.phase;
 
