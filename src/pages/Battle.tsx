@@ -193,10 +193,16 @@ export default function Battle() {
     }
   }, [landmarks, started, sessionOver, gameActive, workoutComplete]);
 
+  // Called by MonsterDisplay once the defeat video + CSS fall finish
+  const handleDefeatEnd = useCallback(() => {
+    setTimeout(() => { setMonsterHP(MONSTER_MAX_HP); setMonsterDefeated(false); }, 1000);
+  }, []);
+
+  // Safety fallback: respawn at most 6 s after defeat in case onEnded never fires
   useEffect(() => {
-    if (monsterDefeated) {
-      setTimeout(() => { setMonsterHP(MONSTER_MAX_HP); setMonsterDefeated(false); }, 2500);
-    }
+    if (!monsterDefeated) return;
+    const fallback = setTimeout(() => { setMonsterHP(MONSTER_MAX_HP); setMonsterDefeated(false); }, 6000);
+    return () => clearTimeout(fallback);
   }, [monsterDefeated]);
 
   const handleStart = useCallback(async () => {
@@ -305,7 +311,7 @@ export default function Battle() {
       </div>
 
       <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} hpPercent={hpPercent} isCrit={isCrit} isDefeated={monsterDefeated} />
+        <MonsterDisplay imageKey="monster-tutorial" isHit={isHit} hpPercent={hpPercent} isCrit={isCrit} isDefeated={monsterDefeated} onDefeatEnd={handleDefeatEnd} />
       </div>
 
       {damageText && (
