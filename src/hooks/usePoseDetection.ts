@@ -7,10 +7,10 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
 
 /**
  * Minimum visibility score required at shoulders, hips AND knees before we
- * accept a detection result. 0.6 rejects hands/objects and partial occlusion
- * while still accepting normally-lit subjects.
+ * accept a detection result. 0.5 is the sweet spot: rejects objects / loose
+ * partial detections while staying reliable in typical mobile lighting.
  */
-const CORE_VISIBILITY_THRESHOLD = 0.6;
+const CORE_VISIBILITY_THRESHOLD = 0.5;
 
 /**
  * EMA blending factor for landmark smoothing.

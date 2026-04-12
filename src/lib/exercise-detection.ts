@@ -46,26 +46,30 @@ export interface ExerciseState {
   _calibFrames: number[];       // hip Y values collected during baseline sub-phase
   _baselineShoulderMid: number; // horizontal mid-shoulder at standing calibration (-1 = unset)
   _bottomConfirmFrames: number; // consecutive frames with hips at depth
+  _upConfirmFrames: number;     // consecutive frames back near standing height
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const BODY_DETECT_FRAMES = 15;
+const BODY_DETECT_FRAMES = 10;         // frames of stable body before calibration starts
 const CALIBRATION_TIMEOUT_MS = 4500;   // squat-wait timeout (sub-phase B)
-const CALIB_BASELINE_FRAMES = 20;      // frames averaged for standing baseline
-const BOTTOM_CONFIRM_FRAMES = 2;       // consecutive frames at depth before counting
-const LATERAL_DRIFT_THRESHOLD = 0.12; // fraction of frame width; catches sideways walking
-const FULL_BODY_VISIBILITY = 0.6;      // min visibility for shoulders/hips/knees
+const CALIB_BASELINE_FRAMES = 15;      // frames averaged for standing baseline
+const BOTTOM_CONFIRM_FRAMES = 2;       // consecutive frames at depth before entering at_bottom
+const UP_CONFIRM_FRAMES = 2;           // consecutive frames near standing before counting rep
+const LATERAL_DRIFT_THRESHOLD = 0.15; // fraction of frame; catches sideways walking
+const KNEE_HIP_TOLERANCE = 0.05;      // knees must be ≥ hipY − this (sanity check)
+const FULL_BODY_VISIBILITY = 0.5;      // min visibility for shoulders/hips/knees
 const SMOOTHING_ALPHA = 0.25;
 const REP_COOLDOWN_MS = 500;
 const MAX_OCCLUSION_FRAMES = 20;
-const SQUAT_DEFAULT_DROP_RATIO = 0.22;
-const SQUAT_MIN_DROP_RATIO = 0.2;
-const SQUAT_MAX_DROP_RATIO = 0.25;
-// How far down (as fraction of calibrated drop) triggers "at bottom"
-const SQUAT_DOWN_FRACTION = 0.55;   // 55% of calibrated depth → "down" (was 65%, too strict)
-// How far back up (as fraction of calibrated drop) triggers rep count
-const SQUAT_UP_FRACTION = 0.30;
+// Drop ratios are expressed as a fraction of body height (shoulder→knee span).
+const SQUAT_DEFAULT_DROP_RATIO = 0.18; // default threshold used when no calib squat done
+const SQUAT_MIN_DROP_RATIO = 0.12;     // adaptive lower bound; also min for calib squat
+const SQUAT_MAX_DROP_RATIO = 0.22;     // adaptive upper bound
+// Fraction of the calibrated drop required to enter / exit squat.
+// downFraction × drop ≈ 11–14 % of body height for a natural squat.
+const SQUAT_DOWN_FRACTION = 0.65;
+const SQUAT_UP_FRACTION = 0.25;
 const MIN_CALIB_DROP = 0.05;
 // Knee angle used only for FEEDBACK, not gating — avoids false rejections when
 // ankles are off-screen (getKneeAngle() returns 180° = straight as a safe fallback,
@@ -122,6 +126,7 @@ export function createExerciseState(exerciseType: ExerciseType): ExerciseState {
     _calibFrames: [],
     _baselineShoulderMid: -1,
     _bottomConfirmFrames: 0,
+    _upConfirmFrames: 0,
   };
 }
 
@@ -165,6 +170,18 @@ function getMidHipVertical(landmarks: Landmark[]): number {
   return headIsAtLowValue ? raw : 1 - raw;
 }
 
+// Returns the mid-knee position on the vertical axis (0 = head, 1 = feet).
+function getMidKneeVertical(landmarks: Landmark[]): number {
+  const lKnee = landmarks[POSE.LEFT_KNEE];
+  const rKnee = landmarks[POSE.RIGHT_KNEE];
+  if (!lKnee || !rKnee) return -1;
+  const { axis, headIsAtLowValue } = getVerticalAxis(landmarks);
+  const raw = axis === 'x'
+    ? (lKnee.x + rKnee.x) / 2
+    : (lKnee.y + rKnee.y) / 2;
+  return headIsAtLowValue ? raw : 1 - raw;
+}
+
 function hasFullBody(landmarks: Landmark[]): boolean {
   // Require shoulders + hips + knees for rep counting
   const required = [
@@ -194,7 +211,7 @@ function hasFullBody(landmarks: Landmark[]): boolean {
 
   // Shoulder width: the axis perpendicular to vertical
   const widthCoord = (lm: { x: number; y: number }) => axis === 'x' ? lm.y : lm.x;
-  if (Math.abs(widthCoord(rS) - widthCoord(lS)) < 0.02) return false;
+  if (Math.abs(widthCoord(rS) - widthCoord(lS)) < 0.01) return false;
 
   return true;
 }
@@ -456,11 +473,17 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   const bodyH   = getBodyHeight(landmarks);
   const hipDrop = smoothedHipY - state._standingHipY;
 
-  // Single hip-drop gate
-  const hipsLow = smoothedHipY >= downThreshold;
+  // ── Knee sanity check ─────────────────────────────────────────────────────
+  // Knees must be at or below hip level (tolerance for slight noise).
+  // Catches cases where MediaPipe swaps landmarks (e.g. hand near camera).
+  const kneeY = getMidKneeVertical(landmarks);
+  const kneesValid = kneeY < 0 || kneeY >= smoothedHipY - KNEE_HIP_TOLERANCE;
 
-  // Lateral drift guard: reject reps if the person has walked sideways.
-  // _baselineShoulderMid is set during calibration; -1 means unset (no check).
+  // ── Hip-drop gate ─────────────────────────────────────────────────────────
+  const hipsLow = smoothedHipY >= downThreshold && kneesValid;
+
+  // ── Lateral drift guard ───────────────────────────────────────────────────
+  // Reject reps if the person has walked sideways since calibration.
   const shoulderMidH = getShoulderMidHorizontal(landmarks);
   const hasDrifted = state._baselineShoulderMid >= 0 &&
     Math.abs(shoulderMidH - state._baselineShoulderMid) > LATERAL_DRIFT_THRESHOLD;
@@ -471,13 +494,14 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
   if (phase === 'cooldown') {
     if (timeSinceRep >= REP_COOLDOWN_MS) {
       state.phase = 'standing';
+      state._upConfirmFrames = 0;
       state.feedback = 'Keep going!';
       state.formQuality = 'neutral';
     }
     return state;
   }
 
-  // ── STANDING ─────────────────────────────────────────────────────────────
+  // ── STANDING / DESCENDING ─────────────────────────────────────────────────
   if (phase === 'standing' || phase === 'descending' || phase === 'ascending') {
     const dropFraction = calibDrop > 0 ? hipDrop / calibDrop : 0;
 
@@ -496,10 +520,11 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
     }
 
     if (hipsLow && !hasDrifted) {
-      // Require BOTTOM_CONFIRM_FRAMES consecutive frames at depth before accepting.
-      // Guards against single-frame noise from camera jitter or movement artifacts.
+      // Require BOTTOM_CONFIRM_FRAMES consecutive frames at depth.
+      // Prevents single-frame camera jitter from triggering a rep.
       const confirmFrames = (state._bottomConfirmFrames ?? 0) + 1;
       state._bottomConfirmFrames = confirmFrames;
+      state._upConfirmFrames = 0;
       if (confirmFrames >= BOTTOM_CONFIRM_FRAMES) {
         state.phase = 'at_bottom';
         state._bottomConfirmFrames = 0;
@@ -508,19 +533,17 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
         state.feedback = 'Good! Come back up!';
         state.formQuality = 'good';
       } else {
-        // Almost there — hold for one more frame
         state.feedback = 'Hold it! ⬇️';
         state.formQuality = 'good';
       }
     } else if (hipsLow && hasDrifted) {
-      // Hips are low but person has drifted sideways — don't count
       state._bottomConfirmFrames = 0;
+      state._upConfirmFrames = 0;
       state.feedback = 'Stay centered!';
       state.formQuality = 'needs_work';
     } else {
       state._bottomConfirmFrames = 0;
       if (dropFraction >= PARTIAL_DESCENT_FRACTION) {
-        // Descending but not yet at depth — give form hint
         const kneeAngle = getKneeAngle(landmarks);
         state.phase = 'standing';
         state.feedback = kneeAngle > SQUAT_KNEE_ANGLE_HINT ? 'Bend knees more! ⬇️' : 'GO LOWER ⬇️';
@@ -539,33 +562,46 @@ function detectSquatPhase(landmarks: Landmark[], state: ExerciseState, smoothedH
     state._peakHipY = Math.max(state._peakHipY, smoothedHipY);
 
     if (smoothedHipY <= upThreshold) {
-      const depthRatio = calibDrop > 0
-        ? (state._peakHipY - state._standingHipY) / calibDrop
-        : 1.0;
+      // Require UP_CONFIRM_FRAMES consecutive frames near standing height
+      // before counting the rep — removes phantom counts from mid-squat pauses.
+      const upFrames = (state._upConfirmFrames ?? 0) + 1;
+      state._upConfirmFrames = upFrames;
 
-      // Adaptive difficulty: adjust threshold based on rolling depth average
-      const adaptHistory = [...state._adaptiveHistory, depthRatio].slice(-5);
-      state._adaptiveHistory = adaptHistory;
-      if (adaptHistory.length >= 3) {
-        const avg = adaptHistory.reduce((s, v) => s + v, 0) / adaptHistory.length;
-        if (avg > 1.3) {
-          state._squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, state._squatDropRatio + ADAPTIVE_STEP);
-          state._threshold = state._standingHipY + bodyH * state._squatDropRatio;
-        } else if (avg < 1.05) {
-          state._squatDropRatio = Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio - ADAPTIVE_STEP);
-          state._threshold = state._standingHipY + bodyH * state._squatDropRatio;
+      if (upFrames >= UP_CONFIRM_FRAMES) {
+        state._upConfirmFrames = 0;
+        const depthRatio = calibDrop > 0
+          ? (state._peakHipY - state._standingHipY) / calibDrop
+          : 1.0;
+
+        // Adaptive difficulty: nudge threshold based on rolling rep depth
+        const adaptHistory = [...state._adaptiveHistory, depthRatio].slice(-5);
+        state._adaptiveHistory = adaptHistory;
+        if (adaptHistory.length >= 3) {
+          const avg = adaptHistory.reduce((s, v) => s + v, 0) / adaptHistory.length;
+          if (avg > 1.3) {
+            state._squatDropRatio = Math.min(SQUAT_MAX_DROP_RATIO, state._squatDropRatio + ADAPTIVE_STEP);
+            state._threshold = state._standingHipY + bodyH * state._squatDropRatio;
+          } else if (avg < 1.05) {
+            state._squatDropRatio = Math.max(SQUAT_MIN_DROP_RATIO, state._squatDropRatio - ADAPTIVE_STEP);
+            state._threshold = state._standingHipY + bodyH * state._squatDropRatio;
+          }
         }
-      }
 
-      state.repCount += 1;
-      state._lastRepTime = now;
-      state._reachedDepth = false;
-      state._inPartialDescent = false;
-      state._peakHipY = 0;
-      state.phase = 'cooldown';
-      state.feedback = depthRatio >= PERFECT_REP_DEPTH_RATIO ? 'PERFECT REP 🔥' : `Rep ${state.repCount}!`;
-      state.formQuality = 'good';
+        state.repCount += 1;
+        state._lastRepTime = now;
+        state._reachedDepth = false;
+        state._inPartialDescent = false;
+        state._peakHipY = 0;
+        state.phase = 'cooldown';
+        state.feedback = depthRatio >= PERFECT_REP_DEPTH_RATIO ? 'PERFECT REP 🔥' : `Rep ${state.repCount}!`;
+        state.formQuality = 'good';
+      } else {
+        // First frame back up — hold for one more to confirm
+        state.feedback = 'Stand back up!';
+        state.formQuality = 'good';
+      }
     } else {
+      state._upConfirmFrames = 0;
       state.feedback = 'Stand back up!';
       state.formQuality = 'good';
     }
