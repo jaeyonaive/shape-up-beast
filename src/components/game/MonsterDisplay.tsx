@@ -60,18 +60,22 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
 
     const t = setTimeout(() => {
       setDefeatStage('video');
-      if (videoRef.current) {
-        videoRef.current.currentTime = 0;
-        videoRef.current.play().catch(() => {
-          // Autoplay blocked — skip straight to CSS fall and notify parent
-          setDefeatStage('fall');
-          setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
-        });
-      }
+      // play() is triggered by the defeatStage effect below, after the re-render
     }, IMPACT_MS);
 
     return () => clearTimeout(t);
   }, [isDefeated]);
+
+  // Play the video once the DOM has rendered it visible (defeatStage === 'video')
+  useEffect(() => {
+    if (defeatStage !== 'video' || !videoRef.current) return;
+    videoRef.current.currentTime = 0;
+    videoRef.current.play().catch(() => {
+      // Autoplay blocked or format unsupported — fall through to CSS animation
+      setDefeatStage('fall');
+      setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
+    });
+  }, [defeatStage]);
 
   // Called when the video finishes naturally
   const handleVideoEnded = useCallback(() => {
@@ -106,7 +110,7 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
         className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
       />
 
-      {/* Defeat video — WebM with alpha channel, no background removal needed */}
+      {/* Defeat video — WebM with alpha channel, always mounted for reliable preload + play */}
       <video
         ref={videoRef}
         src={defeatVideoSrc}
@@ -114,7 +118,10 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
         playsInline
         preload="auto"
         className="absolute inset-0 w-full h-full object-contain"
-        style={{ display: defeatStage === 'video' ? 'block' : 'none' }}
+        style={{
+          opacity:       defeatStage === 'video' ? 1 : 0,
+          pointerEvents: 'none',
+        }}
         onEnded={handleVideoEnded}
       />
     </div>

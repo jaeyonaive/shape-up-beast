@@ -326,11 +326,11 @@ export default function Battle() {
         </div>
       )}
 
-      {/* DEFEATED overlay — delayed 300 ms to land after impact flash */}
+      {/* DEFEATED text — floats above the monster without covering it */}
       {monsterDefeated && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/40"
-             style={{ animation: 'fadeIn 0.4s ease-out 0.3s both' }}>
-          <span className="font-pixel text-2xl text-primary game-text-shadow animate-bounce">💥 DEFEATED!</span>
+        <div className="absolute top-[28%] left-1/2 -translate-x-1/2 z-40 pointer-events-none"
+             style={{ animation: 'fadeIn 0.3s ease-out 0.2s both' }}>
+          <span className="font-pixel text-2xl text-primary game-text-shadow drop-shadow-lg">💥 DEFEATED!</span>
         </div>
       )}
 
