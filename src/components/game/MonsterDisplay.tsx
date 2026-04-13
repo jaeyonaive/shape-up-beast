@@ -84,16 +84,19 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
   return (
     <div className="pointer-events-none relative flex items-center justify-center" style={wrapperStyle}>
 
-      {/* Monster sprite — hidden while GIF plays, restored after */}
-      {defeatStage !== 'gif' && (
-        <img
-          src={monsterImages[imageKey]}
-          alt="Monster"
-          className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
-        />
-      )}
+      {/* Monster sprite — always visible; provides the coloured bunny in all stages */}
+      <img
+        src={monsterImages[imageKey]}
+        alt="Monster"
+        className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
+      />
 
-      {/* Defeat GIF — GIF binary patched so all 22 frames use transparent bg */}
+      {/*
+        Defeat GIF overlay — only mounted during gif stage.
+        mix-blend-mode:screen makes ALL dark/black pixels (including the dark
+        bunny body in the defeat animation) transparent, so only the bright
+        sparkle effects are visible on top of the coloured sprite below.
+      */}
       {defeatStage === 'gif' && (
         <div
           style={{
@@ -108,7 +111,8 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
           <img
             src={defeatGifSrc}
             alt=""
-            style={{ maxHeight: '68vh', maxWidth: '88vw', objectFit: 'contain' }}
+            className="w-80 h-80 object-contain"
+            style={{ mixBlendMode: 'screen' }}
           />
         </div>
       )}
