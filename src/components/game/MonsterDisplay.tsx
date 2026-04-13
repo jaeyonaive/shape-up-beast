@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import monsterTutorial from '@/assets/monster-tutorial.png';
 import monsterBoss from '@/assets/monster-boss.png';
-import defeatGifSrc from '@/assets/monster-defeat.gif';
+import defeatGifSrc from '@/assets/monster-defeat-new.gif';
 
 const monsterImages: Record<string, string> = {
   'monster-tutorial': monsterTutorial,
@@ -17,20 +17,16 @@ interface MonsterDisplayProps {
   onDefeatEnd?: () => void;
 }
 
-type DefeatStage = 'none' | 'impact' | 'gif' | 'fall';
-
-const IMPACT_MS = 200;
-const GIF_MS    = 2200; // 22 frames × 100 ms
-const FALL_MS   = 600;
+// Match the GIF duration (58 frames × ~40 ms ≈ 2320 ms; use 2400 ms for safety)
+const DEFEAT_MS = 2400;
 
 export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated, onDefeatEnd }: MonsterDisplayProps) {
-  const [hitAnim,     setHitAnim]     = useState(false);
-  const [critAnim,    setCritAnim]    = useState(false);
-  const [defeatStage, setDefeatStage] = useState<DefeatStage>('none');
+  const [hitAnim,  setHitAnim]  = useState(false);
+  const [critAnim, setCritAnim] = useState(false);
   const onDefeatEndRef = useRef(onDefeatEnd);
   onDefeatEndRef.current = onDefeatEnd;
 
-  // ── Regular hit / crit ─────────────────────────────────────────────────────
+  // ── Regular hit / crit ────────────────────────────────────────────────────
   useEffect(() => {
     if (isDefeated) return;
     if (!isHit) return;
@@ -45,87 +41,44 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
     }
   }, [isHit, isCrit, isDefeated]);
 
-  // ── Defeat sequence ─────────────────────────────────────────────────────────
-  //  impact (200ms) → GIF plays (2200ms) → CSS fall (600ms) → onDefeatEnd fires
+  // ── Defeat: GIF plays for DEFEAT_MS then notify parent ────────────────────
   useEffect(() => {
-    if (!isDefeated) {
-      setDefeatStage('none');
-      return;
-    }
-    setDefeatStage('impact');
-    const t = setTimeout(() => setDefeatStage('gif'), IMPACT_MS);
+    if (!isDefeated) return;
+    const t = setTimeout(() => onDefeatEndRef.current?.(), DEFEAT_MS);
     return () => clearTimeout(t);
   }, [isDefeated]);
 
-  // Advance to fall stage after one full GIF loop
-  useEffect(() => {
-    if (defeatStage !== 'gif') return;
-    const t = setTimeout(() => {
-      setDefeatStage('fall');
-      setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
-    }, GIF_MS);
-    return () => clearTimeout(t);
-  }, [defeatStage]);
+  // ── Defeated state: show GIF only ────────────────────────────────────────
+  if (isDefeated) {
+    return (
+      <div
+        className="pointer-events-none relative flex items-center justify-center"
+        style={{ transform: 'scale(1.15)', transition: 'transform 0.3s ease' }}
+      >
+        <img
+          src={defeatGifSrc}
+          alt="Monster defeated"
+          className="w-80 h-80 object-contain"
+          style={{ display: 'block', background: 'transparent' }}
+        />
+      </div>
+    );
+  }
 
-  // ── Sprite class for the monster image ────────────────────────────────────
+  // ── Normal state: idle / hit / crit animations ────────────────────────────
   const idleClass = hpPercent < 30 ? 'monster-low-hp' : 'monster-float';
   let spriteClass: string;
-  if      (defeatStage === 'impact') spriteClass = 'monster-defeat-impact';
-  else if (defeatStage === 'fall')   spriteClass = 'monster-defeat-fall';
-  else if (critAnim)                 spriteClass = 'monster-crit';
-  else if (hitAnim)                  spriteClass = 'monster-hit';
-  else                               spriteClass = idleClass;
-
-  const wrapperStyle: React.CSSProperties =
-    defeatStage === 'impact'
-      ? { transform: 'scale(1.15)', transition: 'transform 0.15s ease-out' }
-      : { transition: 'transform 0.3s ease-in' };
+  if      (critAnim) spriteClass = 'monster-crit';
+  else if (hitAnim)  spriteClass = 'monster-hit';
+  else               spriteClass = idleClass;
 
   return (
-    /*
-      isolation:isolate creates a guaranteed stacking context so that
-      mix-blend-mode on the gif wrapper blends against the coloured sprite
-      (its sibling) and nothing outside this element.
-    */
-    <div
-      className="pointer-events-none relative flex items-center justify-center"
-      style={{ ...wrapperStyle, isolation: 'isolate' }}
-    >
-
-      {/* Monster sprite — always visible; provides the coloured bunny in all stages */}
+    <div className="pointer-events-none relative flex items-center justify-center">
       <img
         src={monsterImages[imageKey]}
         alt="Monster"
         className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
       />
-
-      {/*
-        Defeat GIF overlay — only mounted during gif stage.
-        mix-blend-mode:screen is on the WRAPPER div, not the img.
-        The wrapper has no z-index so it does not create its own isolated
-        stacking context — it blends against the coloured sprite above.
-        Screen blend turns every dark/black GIF pixel transparent, leaving
-        only the bright sparkle effects visible on top of the sprite.
-      */}
-      {defeatStage === 'gif' && (
-        <div
-          className="defeat-gif-wrapper"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            mixBlendMode: 'lighten',
-          }}
-        >
-          <img
-            src={defeatGifSrc}
-            alt=""
-            className="w-80 h-80 object-contain"
-          />
-        </div>
-      )}
     </div>
   );
 }
