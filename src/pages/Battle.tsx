@@ -367,9 +367,22 @@ export default function Battle() {
         </AnimatePresence>
       </div>
 
-      <div className="absolute bottom-4 right-4 z-40 text-right">
+      <div
+        className="timer-hud absolute right-4 z-40 text-right"
+        style={{ top: '60%', transform: 'translateY(-50%)', maxWidth: '120px' }}
+      >
         <span className="font-pixel text-xs text-game-gold game-text-shadow block">TIME</span>
-        <span className="font-pixel text-4xl text-game-gold game-text-shadow italic">{phaseTimeLeft}</span>
+        <span
+          className={`font-pixel text-5xl game-text-shadow italic block ${
+            phaseTimeLeft <= 5
+              ? 'text-destructive timer-critical'
+              : phaseTimeLeft <= 10
+              ? 'text-game-warning timer-urgent'
+              : 'text-game-gold'
+          }`}
+        >
+          {phaseTimeLeft}
+        </span>
       </div>
 
     </div>
