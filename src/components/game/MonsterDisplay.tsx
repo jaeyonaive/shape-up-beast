@@ -20,7 +20,7 @@ interface MonsterDisplayProps {
 type DefeatStage = 'none' | 'impact' | 'video' | 'fall';
 
 const IMPACT_MS = 200;
-const FALL_MS   = 700;
+const FALL_MS   = 600;
 
 export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated, onDefeatEnd }: MonsterDisplayProps) {
   const [hitAnim,     setHitAnim]     = useState(false);
@@ -46,7 +46,7 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
   }, [isHit, isCrit, isDefeated]);
 
   // ── Defeat sequence ─────────────────────────────────────────────────────────
-  //  impact (200ms) → transparent video plays → CSS fall (700ms) → onDefeatEnd
+  //  impact (200ms) → video plays → CSS fall (600ms) → onDefeatEnd fires
   useEffect(() => {
     if (!isDefeated) {
       setDefeatStage('none');
@@ -57,31 +57,27 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
     return () => clearTimeout(t);
   }, [isDefeated]);
 
-  // Play the video after React has rendered defeatStage='video' (avoids display:none race)
+  // Play video after React mounts the video element (defeatStage just became 'video')
   useEffect(() => {
     if (defeatStage !== 'video' || !videoRef.current) return;
     const v = videoRef.current;
-    v.currentTime  = 0;
     v.playbackRate = 0.75;
     v.play().catch(() => {
-      // Autoplay blocked or format unsupported — skip to CSS fall
+      // Autoplay blocked or format unsupported — fall back to CSS animation
       setDefeatStage('fall');
       setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
     });
   }, [defeatStage]);
 
-  // Called when video finishes naturally
   const handleVideoEnded = useCallback(() => {
     setDefeatStage('fall');
     setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
   }, []);
 
-  // ── Sprite class ───────────────────────────────────────────────────────────
+  // ── Sprite class for the monster image ────────────────────────────────────
   const idleClass = hpPercent < 30 ? 'monster-low-hp' : 'monster-float';
-
   let spriteClass: string;
   if      (defeatStage === 'impact') spriteClass = 'monster-defeat-impact';
-  else if (defeatStage === 'video')  spriteClass = 'opacity-0 pointer-events-none';
   else if (defeatStage === 'fall')   spriteClass = 'monster-defeat-fall';
   else if (critAnim)                 spriteClass = 'monster-crit';
   else if (hitAnim)                  spriteClass = 'monster-hit';
@@ -94,35 +90,58 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
 
   return (
     <div className="pointer-events-none relative flex items-center justify-center" style={wrapperStyle}>
-      {/* Monster sprite — hidden during video, restored on fall/none */}
-      <img
-        src={monsterImages[imageKey]}
-        alt="Monster"
-        className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
-      />
 
-      {/* Defeat video — transparent WebM, no blend modes, no filters */}
-      <video
-        ref={videoRef}
-        src={defeatVideoSrc}
-        muted
-        playsInline
-        preload="auto"
-        style={{
-          position:  'absolute',
-          left:      '50%',
-          top:       '50%',
-          transform: 'translate(-50%, -50%) scale(1.2)',
-          maxHeight: '68vh',
-          maxWidth:  '88vw',
-          objectFit: 'contain',
-          background: 'transparent',
-          zIndex:    defeatStage === 'video' ? 50 : -1,
-          opacity:   defeatStage === 'video' ? 1 : 0,
-          pointerEvents: 'none',
-        }}
-        onEnded={handleVideoEnded}
-      />
+      {/*
+        Monster sprite — only rendered when NOT playing the defeat video.
+        Conditional rendering (not opacity/display tricks) ensures there is
+        never a stacking conflict with the video element.
+      */}
+      {defeatStage !== 'video' && (
+        <img
+          src={monsterImages[imageKey]}
+          alt="Monster"
+          className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
+        />
+      )}
+
+      {/*
+        Defeat video — only mounted during playback, removed from DOM immediately
+        after (React conditional rendering).
+
+        mix-blend-mode:screen is required for iOS Safari: Safari does not support
+        WebM alpha-channel transparency and renders transparent areas as black.
+        Screen blend makes black pixels invisible against the coloured background,
+        effectively restoring the transparency. On browsers with native alpha
+        support the transparent pixels have alpha=0 and are already invisible,
+        so screen blend does not affect them.
+      */}
+      {defeatStage === 'video' && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+        >
+          <video
+            ref={videoRef}
+            src={defeatVideoSrc}
+            muted
+            playsInline
+            style={{
+              maxHeight:    '68vh',
+              maxWidth:     '88vw',
+              objectFit:    'contain',
+              background:   'transparent',
+              mixBlendMode: 'screen',
+            }}
+            onEnded={handleVideoEnded}
+          />
+        </div>
+      )}
     </div>
   );
 }
