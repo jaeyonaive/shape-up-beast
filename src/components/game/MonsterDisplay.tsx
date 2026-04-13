@@ -116,7 +116,7 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            mixBlendMode: 'screen',
+            mixBlendMode: 'lighten',
           }}
         >
           <img
