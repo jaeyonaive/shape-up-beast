@@ -16,7 +16,7 @@ import {
 } from '@/lib/game-data';
 import { Button } from '@/components/ui/button';
 import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
-import bgMusicSrc from '@/assets/bg-music.mpeg';
+import { startBgMusic, stopBgMusic } from '@/lib/bgMusic';
 
 export default function Battle() {
   const navigate = useNavigate();
@@ -45,13 +45,16 @@ export default function Battle() {
   const [monsterDefeated, setMonsterDefeated] = useState(false);
 
   // ── Background music ────────────────────────────────────────────────────────
-  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
+  // Fallback for "Go Again" (full page reload) where no gesture fires on Home.
+  // The first touch on the Battle page re-triggers the audio in gesture context.
   useEffect(() => {
-    const audio = new Audio(bgMusicSrc);
-    audio.loop = true;
-    audio.volume = 0.3;
-    bgMusicRef.current = audio;
-    return () => { audio.pause(); audio.src = ''; };
+    const unlock = () => { startBgMusic(); };
+    document.addEventListener('touchstart', unlock, { once: true });
+    document.addEventListener('click',      unlock, { once: true });
+    return () => {
+      document.removeEventListener('touchstart', unlock);
+      document.removeEventListener('click',      unlock);
+    };
   }, []);
 
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
@@ -121,11 +124,7 @@ export default function Battle() {
     exerciseStateRef.current = newState;
     setDisplayState({ ...newState });
 
-    if (newState.calibrated && !gameActive) {
-      setGameActive(true);
-      // Start music on first user-driven gesture (pose detection = camera active = user present)
-      bgMusicRef.current?.play().catch(() => {});
-    }
+    if (newState.calibrated && !gameActive) setGameActive(true);
 
     const isActive = gameActive || newState.calibrated;
     // Track partial squat attempts for accuracy (before overwriting exerciseStateRef)
@@ -242,8 +241,7 @@ export default function Battle() {
   const handleEndSession = useCallback(() => {
     setSessionOver(true);
     stopCamera();
-    bgMusicRef.current?.pause();
-    if (bgMusicRef.current) bgMusicRef.current.currentTime = 0;
+    stopBgMusic();
     const state = loadGameState();
     state.totalCoins += coins;
     state.totalReps += totalReps;

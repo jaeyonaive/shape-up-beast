@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import titleBg from '@/assets/title-screen-bg.png';
+import { startBgMusic } from '@/lib/bgMusic';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export default function Home() {
 
       {/* Play button overlay — positioned over the red PLAY button in the design */}
       <button
-        onClick={() => navigate('/battle/0')}
+        onClick={() => { startBgMusic(); navigate('/battle/0'); }}
         className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 w-[42vw] h-[7vh] z-10 active:scale-95 transition-transform duration-150 rounded-full"
         aria-label="Start Game"
       />

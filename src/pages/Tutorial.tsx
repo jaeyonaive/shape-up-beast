@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import monsterTutorial from '@/assets/monster-tutorial.png';
+import { startBgMusic } from '@/lib/bgMusic';
 
 const STEPS = [
   {
@@ -83,7 +84,7 @@ export default function Tutorial() {
             if (step < STEPS.length - 1) {
               setStep(step + 1);
             } else {
-              navigate('/battle/0');
+              startBgMusic(); navigate('/battle/0');
             }
           }}
           className="flex-1 h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90"
