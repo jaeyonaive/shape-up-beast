@@ -77,7 +77,7 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
   else                               spriteClass = idleClass;
 
   const wrapperStyle: React.CSSProperties =
-    defeatStage !== 'none'
+    defeatStage === 'impact'
       ? { transform: 'scale(1.15)', transition: 'transform 0.15s ease-out' }
       : { transition: 'transform 0.3s ease-in' };
 
@@ -91,14 +91,10 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
         className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
       />
 
-      {/*
-        Defeat GIF overlay — only mounted during gif stage.
-        mix-blend-mode:screen makes ALL dark/black pixels (including the dark
-        bunny body in the defeat animation) transparent, so only the bright
-        sparkle effects are visible on top of the coloured sprite below.
-      */}
+      {/* Defeat GIF overlay — only mounted during gif stage */}
       {defeatStage === 'gif' && (
         <div
+          className="defeat-gif-wrapper"
           style={{
             position: 'absolute',
             inset: 0,
@@ -112,7 +108,11 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
             src={defeatGifSrc}
             alt=""
             className="w-80 h-80 object-contain"
-            style={{ mixBlendMode: 'screen' }}
+            style={{
+              imageRendering: 'auto',
+              background: 'transparent',
+              filter: 'brightness(1.15) contrast(1.1)',
+            }}
           />
         </div>
       )}
