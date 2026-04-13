@@ -113,9 +113,14 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
             src={defeatGifSrc}
             alt=""
             style={{
-              maxHeight: '68vh',
-              maxWidth:  '88vw',
-              objectFit: 'contain',
+              maxHeight:    '68vh',
+              maxWidth:     '88vw',
+              objectFit:    'contain',
+              // The GIF's first frame has no transparency flag; its background
+              // colour index maps to RGB(0,0,0). mix-blend-mode:screen makes
+              // pure-black pixels invisible against the coloured game background,
+              // effectively restoring transparency without re-encoding the file.
+              mixBlendMode: 'screen',
             }}
           />
         </div>
