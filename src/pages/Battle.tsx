@@ -16,6 +16,7 @@ import {
 } from '@/lib/game-data';
 import { Button } from '@/components/ui/button';
 import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
+import bgMusicSrc from '@/assets/bg-music.mpeg';
 
 export default function Battle() {
   const navigate = useNavigate();
@@ -42,6 +43,16 @@ export default function Battle() {
   const [gameActive, setGameActive] = useState(false);
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
+
+  // ── Background music ────────────────────────────────────────────────────────
+  const bgMusicRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const audio = new Audio(bgMusicSrc);
+    audio.loop = true;
+    audio.volume = 0.3;
+    bgMusicRef.current = audio;
+    return () => { audio.pause(); audio.src = ''; };
+  }, []);
 
   const exerciseStateRef = useRef<ExerciseState>(createExerciseState(WORKOUT_PHASES[0].exercise));
   const [displayState, setDisplayState] = useState<ExerciseState>(exerciseStateRef.current);
@@ -110,7 +121,11 @@ export default function Battle() {
     exerciseStateRef.current = newState;
     setDisplayState({ ...newState });
 
-    if (newState.calibrated && !gameActive) setGameActive(true);
+    if (newState.calibrated && !gameActive) {
+      setGameActive(true);
+      // Start music on first user-driven gesture (pose detection = camera active = user present)
+      bgMusicRef.current?.play().catch(() => {});
+    }
 
     const isActive = gameActive || newState.calibrated;
     // Track partial squat attempts for accuracy (before overwriting exerciseStateRef)
@@ -227,6 +242,8 @@ export default function Battle() {
   const handleEndSession = useCallback(() => {
     setSessionOver(true);
     stopCamera();
+    bgMusicRef.current?.pause();
+    if (bgMusicRef.current) bgMusicRef.current.currentTime = 0;
     const state = loadGameState();
     state.totalCoins += coins;
     state.totalReps += totalReps;
