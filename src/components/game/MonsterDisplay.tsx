@@ -82,7 +82,15 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
       : { transition: 'transform 0.3s ease-in' };
 
   return (
-    <div className="pointer-events-none relative flex items-center justify-center" style={wrapperStyle}>
+    /*
+      isolation:isolate creates a guaranteed stacking context so that
+      mix-blend-mode on the gif wrapper blends against the coloured sprite
+      (its sibling) and nothing outside this element.
+    */
+    <div
+      className="pointer-events-none relative flex items-center justify-center"
+      style={{ ...wrapperStyle, isolation: 'isolate' }}
+    >
 
       {/* Monster sprite — always visible; provides the coloured bunny in all stages */}
       <img
@@ -91,7 +99,14 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
         className={`w-80 h-80 object-contain drop-shadow-2xl ${spriteClass}`}
       />
 
-      {/* Defeat GIF overlay — only mounted during gif stage */}
+      {/*
+        Defeat GIF overlay — only mounted during gif stage.
+        mix-blend-mode:screen is on the WRAPPER div, not the img.
+        The wrapper has no z-index so it does not create its own isolated
+        stacking context — it blends against the coloured sprite above.
+        Screen blend turns every dark/black GIF pixel transparent, leaving
+        only the bright sparkle effects visible on top of the sprite.
+      */}
       {defeatStage === 'gif' && (
         <div
           className="defeat-gif-wrapper"
@@ -101,18 +116,13 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 50,
+            mixBlendMode: 'screen',
           }}
         >
           <img
             src={defeatGifSrc}
             alt=""
             className="w-80 h-80 object-contain"
-            style={{
-              imageRendering: 'auto',
-              background: 'transparent',
-              filter: 'brightness(1.15) contrast(1.1)',
-            }}
           />
         </div>
       )}
