@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import monsterTutorial from '@/assets/monster-tutorial.png';
 import monsterBoss from '@/assets/monster-boss.png';
-import defeatVideoSrc from '@/assets/monster-defeat.webm';
+import defeatGifSrc from '@/assets/monster-defeat.gif';
 
 const monsterImages: Record<string, string> = {
   'monster-tutorial': monsterTutorial,
@@ -17,16 +17,16 @@ interface MonsterDisplayProps {
   onDefeatEnd?: () => void;
 }
 
-type DefeatStage = 'none' | 'impact' | 'video' | 'fall';
+type DefeatStage = 'none' | 'impact' | 'gif' | 'fall';
 
 const IMPACT_MS = 200;
+const GIF_MS    = 2200; // one full loop of monster-defeat.gif (22 frames × 100ms)
 const FALL_MS   = 600;
 
 export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated, onDefeatEnd }: MonsterDisplayProps) {
   const [hitAnim,     setHitAnim]     = useState(false);
   const [critAnim,    setCritAnim]    = useState(false);
   const [defeatStage, setDefeatStage] = useState<DefeatStage>('none');
-  const videoRef       = useRef<HTMLVideoElement | null>(null);
   const onDefeatEndRef = useRef(onDefeatEnd);
   onDefeatEndRef.current = onDefeatEnd;
 
@@ -46,33 +46,26 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
   }, [isHit, isCrit, isDefeated]);
 
   // ── Defeat sequence ─────────────────────────────────────────────────────────
-  //  impact (200ms) → video plays → CSS fall (600ms) → onDefeatEnd fires
+  //  impact (200ms) → GIF plays (2200ms) → CSS fall (600ms) → onDefeatEnd fires
   useEffect(() => {
     if (!isDefeated) {
       setDefeatStage('none');
       return;
     }
     setDefeatStage('impact');
-    const t = setTimeout(() => setDefeatStage('video'), IMPACT_MS);
+    const t = setTimeout(() => setDefeatStage('gif'), IMPACT_MS);
     return () => clearTimeout(t);
   }, [isDefeated]);
 
-  // Play video after React mounts the video element (defeatStage just became 'video')
+  // Advance to fall stage after one full GIF loop
   useEffect(() => {
-    if (defeatStage !== 'video' || !videoRef.current) return;
-    const v = videoRef.current;
-    v.playbackRate = 0.75;
-    v.play().catch(() => {
-      // Autoplay blocked or format unsupported — fall back to CSS animation
+    if (defeatStage !== 'gif') return;
+    const t = setTimeout(() => {
       setDefeatStage('fall');
       setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
-    });
+    }, GIF_MS);
+    return () => clearTimeout(t);
   }, [defeatStage]);
-
-  const handleVideoEnded = useCallback(() => {
-    setDefeatStage('fall');
-    setTimeout(() => onDefeatEndRef.current?.(), FALL_MS);
-  }, []);
 
   // ── Sprite class for the monster image ────────────────────────────────────
   const idleClass = hpPercent < 30 ? 'monster-low-hp' : 'monster-float';
@@ -91,12 +84,8 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
   return (
     <div className="pointer-events-none relative flex items-center justify-center" style={wrapperStyle}>
 
-      {/*
-        Monster sprite — only rendered when NOT playing the defeat video.
-        Conditional rendering (not opacity/display tricks) ensures there is
-        never a stacking conflict with the video element.
-      */}
-      {defeatStage !== 'video' && (
+      {/* Monster sprite — hidden while GIF plays, restored after */}
+      {defeatStage !== 'gif' && (
         <img
           src={monsterImages[imageKey]}
           alt="Monster"
@@ -105,17 +94,11 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
       )}
 
       {/*
-        Defeat video — only mounted during playback, removed from DOM immediately
-        after (React conditional rendering).
-
-        mix-blend-mode:screen is required for iOS Safari: Safari does not support
-        WebM alpha-channel transparency and renders transparent areas as black.
-        Screen blend makes black pixels invisible against the coloured background,
-        effectively restoring the transparency. On browsers with native alpha
-        support the transparent pixels have alpha=0 and are already invisible,
-        so screen blend does not affect them.
+        Defeat GIF — only mounted during playback.
+        GIF transparency works natively on all browsers including iOS Safari —
+        no blend modes or filters needed.
       */}
-      {defeatStage === 'video' && (
+      {defeatStage === 'gif' && (
         <div
           style={{
             position: 'absolute',
@@ -126,19 +109,14 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
             zIndex: 50,
           }}
         >
-          <video
-            ref={videoRef}
-            src={defeatVideoSrc}
-            muted
-            playsInline
+          <img
+            src={defeatGifSrc}
+            alt=""
             style={{
-              maxHeight:    '68vh',
-              maxWidth:     '88vw',
-              objectFit:    'contain',
-              background:   'transparent',
-              mixBlendMode: 'screen',
+              maxHeight: '68vh',
+              maxWidth:  '88vw',
+              objectFit: 'contain',
             }}
-            onEnded={handleVideoEnded}
           />
         </div>
       )}
