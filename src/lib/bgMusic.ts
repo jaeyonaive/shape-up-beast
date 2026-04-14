@@ -13,15 +13,16 @@ function getAudio(): HTMLAudioElement {
   return audio;
 }
 
-// FIX 3: One-time touchstart on document primes the AudioContext on iOS.
-// A silent play→pause "unlocks" the audio element so a later play() succeeds
-// even if it happens a few ms after the gesture.
-document.body.addEventListener('touchstart', () => {
-  const a = getAudio();
-  a.play()
-    .then(() => { a.pause(); a.currentTime = 0; })
-    .catch(() => {});
-}, { once: true });
+// One-time touchstart on document primes the AudioContext on iOS.
+// Guarded so it never throws if document.body isn't ready.
+if (typeof document !== 'undefined' && document.body) {
+  document.body.addEventListener('touchstart', () => {
+    try {
+      const a = getAudio();
+      a.play().then(() => { a.pause(); a.currentTime = 0; }).catch(() => {});
+    } catch (_) { /* non-fatal */ }
+  }, { once: true });
+}
 
 // FIX 1: call this directly inside an onClick/onTap handler.
 // iOS Safari only allows play() when the call stack originates from a gesture.
