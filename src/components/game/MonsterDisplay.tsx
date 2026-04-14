@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import monsterTutorial from '@/assets/monster-tutorial.png';
 import monsterBoss from '@/assets/monster-boss.png';
-import defeatGifSrc from '@/assets/monster-defeat-new.gif';
+import defeatGifSrc from '@/assets/defeated-bunny.gif';
 
 const monsterImages: Record<string, string> = {
   'monster-tutorial': monsterTutorial,
@@ -17,8 +17,8 @@ interface MonsterDisplayProps {
   onDefeatEnd?: () => void;
 }
 
-// Match the GIF duration (58 frames × ~40 ms ≈ 2320 ms; use 2400 ms for safety)
-const DEFEAT_MS = 2400;
+// Hold the GIF for 2600 ms — long enough to feel slower and more impactful
+const DEFEAT_MS = 2600;
 
 export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated, onDefeatEnd }: MonsterDisplayProps) {
   const [hitAnim,  setHitAnim]  = useState(false);
@@ -53,7 +53,7 @@ export function MonsterDisplay({ imageKey, isHit, hpPercent, isCrit, isDefeated,
     return (
       <div
         className="pointer-events-none relative flex items-center justify-center"
-        style={{ transform: 'scale(1.15)', transition: 'transform 0.3s ease' }}
+        style={{ transform: 'scale(1.2)', transition: 'transform 0.4s ease-out' }}
       >
         <img
           src={defeatGifSrc}
