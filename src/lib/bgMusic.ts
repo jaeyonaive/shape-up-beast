@@ -1,4 +1,4 @@
-import bgMusicSrc from '@/assets/bg-music.mpeg';
+import bgMusicSrc from '@/assets/bg-music.mp3';
 
 // Module-level singleton — survives React SPA navigation (not full reloads).
 let audio: HTMLAudioElement | null = null;
