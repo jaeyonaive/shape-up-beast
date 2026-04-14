@@ -251,7 +251,12 @@ export default function Battle() {
     saveGameState(state);
   }, [coins, calories, score, totalReps, stopCamera]);
 
-  useEffect(() => { handleStart(); }, [handleStart]);
+  const [showInstructions, setShowInstructions] = useState(true);
+
+  const handleStartFromInstructions = useCallback(() => {
+    setShowInstructions(false);
+    handleStart();
+  }, [handleStart]);
 
   if (sessionOver) {
     const performanceScore = calculatePerformanceScore(totalReps, accuracy, bestCombo);
@@ -276,6 +281,37 @@ export default function Battle() {
             <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">🏠 Home</Button>
             <Button variant="outline" onClick={() => window.location.reload()} className="w-full h-12 font-body font-semibold border-border text-foreground">🔄 Go Again</Button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (showInstructions) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-background/95 px-6 fade-in">
+        <div className="game-panel p-8 max-w-xs w-full text-center">
+          <h1 className="font-pixel text-sm text-primary game-text-shadow mb-6 leading-relaxed">
+            HOW TO PLAY
+          </h1>
+          <ul className="space-y-4 mb-8 text-left">
+            {[
+              ['👤', 'Stand where your full body is visible'],
+              ['🦵', 'Do squats to attack the monster'],
+              ['💥', 'One full squat = one hit'],
+              ['⏱️', 'Defeat the monster before time runs out'],
+            ].map(([icon, text]) => (
+              <li key={text} className="flex items-start gap-3">
+                <span className="text-xl shrink-0">{icon}</span>
+                <span className="font-body text-sm text-foreground leading-snug">{text}</span>
+              </li>
+            ))}
+          </ul>
+          <Button
+            onClick={handleStartFromInstructions}
+            className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-transform"
+          >
+            START
+          </Button>
         </div>
       </div>
     );
