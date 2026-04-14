@@ -254,6 +254,7 @@ export default function Battle() {
   const [showInstructions, setShowInstructions] = useState(true);
 
   const handleStartFromInstructions = useCallback(() => {
+    startBgMusic(); // called directly in the tap handler — satisfies iOS gesture requirement
     setShowInstructions(false);
     handleStart();
   }, [handleStart]);
