@@ -5,7 +5,9 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
-  base: mode === "production" ? "/shape-up-beast/" : "/",
+  // Netlify serves from root; GitHub Pages serves from /shape-up-beast/.
+  // process.env.NETLIFY is set automatically on every Netlify build.
+  base: process.env.NETLIFY ? '/' : (mode === 'production' ? '/shape-up-beast/' : '/'),
   server: {
     host: "::",
     port: 8080,
