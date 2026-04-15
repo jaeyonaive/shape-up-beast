@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 interface SessionRow {
   created_at: string;
   completed: boolean;
+  user_id?: string;
 }
 
 interface DayCount {
@@ -29,23 +30,25 @@ interface Props {
 }
 
 export function StatsOverlay({ onClose }: Props) {
-  const [loading, setLoading]   = useState(true);
-  const [error,   setError]     = useState<string | null>(null);
-  const [total,   setTotal]     = useState(0);
-  const [today,   setToday]     = useState(0);
-  const [days,    setDays]      = useState<DayCount[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [total,       setTotal]       = useState(0);
+  const [today,       setToday]       = useState(0);
+  const [uniqueUsers, setUniqueUsers] = useState(0);
+  const [days,        setDays]        = useState<DayCount[]>([]);
 
   useEffect(() => {
     (async () => {
       try {
         const { data, error: err } = await supabase
           .from('sessions')
-          .select('created_at, completed');
+          .select('created_at, completed, user_id');
         if (err) throw err;
         const rows = (data ?? []) as SessionRow[];
         const todayStr = new Date().toDateString();
         setTotal(rows.length);
         setToday(rows.filter(s => new Date(s.created_at).toDateString() === todayStr).length);
+        setUniqueUsers(new Set(rows.map(s => s.user_id).filter(Boolean)).size);
         setDays(getLastSevenDays(rows));
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load stats');
@@ -92,11 +95,15 @@ export function StatsOverlay({ onClose }: Props) {
             <div className="flex gap-3 mb-6">
               <div className="flex-1 bg-muted rounded-lg p-3 text-center">
                 <p className="font-pixel text-lg text-primary">{total}</p>
-                <p className="font-body text-xs text-muted-foreground mt-1">Total</p>
+                <p className="font-body text-xs text-muted-foreground mt-1">Sessions</p>
               </div>
               <div className="flex-1 bg-muted rounded-lg p-3 text-center">
                 <p className="font-pixel text-lg text-secondary">{today}</p>
                 <p className="font-body text-xs text-muted-foreground mt-1">Today</p>
+              </div>
+              <div className="flex-1 bg-muted rounded-lg p-3 text-center">
+                <p className="font-pixel text-lg text-accent">{uniqueUsers}</p>
+                <p className="font-body text-xs text-muted-foreground mt-1">Users</p>
               </div>
             </div>
 
