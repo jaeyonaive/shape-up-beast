@@ -19,6 +19,27 @@ import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
 import { startBgMusic, stopBgMusic } from '@/lib/bgMusic';
 import { trackSession } from '@/lib/supabase';
 
+// ── Streak helpers ──────────────────────────────────────────────────────────
+function getStoredStreak(): number {
+  return parseInt(localStorage.getItem('streakCount') || '0', 10);
+}
+
+function updateStreak(): number {
+  const today     = new Date().toDateString();
+  const lastPlayed = localStorage.getItem('streakLastPlayed');
+  let streak       = getStoredStreak();
+
+  if (lastPlayed === today) return streak; // already counted today
+
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  streak = lastPlayed === yesterday.toDateString() ? streak + 1 : 1;
+
+  localStorage.setItem('streakCount',       streak.toString());
+  localStorage.setItem('streakLastPlayed',  today);
+  return streak;
+}
+
 export default function Battle() {
   const navigate = useNavigate();
   const { landmarks, isLoading, error, cameraActive, cameraStatus, startCamera, stopCamera, videoRef } = usePoseDetection();
@@ -44,6 +65,7 @@ export default function Battle() {
   const [gameActive, setGameActive] = useState(false);
   const [sessionOver, setSessionOver] = useState(false);
   const [monsterDefeated, setMonsterDefeated] = useState(false);
+  const [currentStreak, setCurrentStreak] = useState(getStoredStreak);
 
   // ── Background music ────────────────────────────────────────────────────────
   // Fallback for "Go Again" (full page reload) where no gesture fires on Home.
@@ -250,6 +272,7 @@ export default function Battle() {
     if (score > state.highScore) state.highScore = score;
     if (bestComboRef.current > state.bestStreak) state.bestStreak = bestComboRef.current;
     saveGameState(state);
+    setCurrentStreak(updateStreak());
     trackSession(); // fire-and-forget — never blocks or throws
   }, [coins, calories, score, totalReps, stopCamera]);
 
@@ -279,6 +302,7 @@ export default function Battle() {
             <p className="font-body text-sm text-foreground">Best Combo: <span className="font-pixel text-secondary">x{bestCombo}</span></p>
             <p className="font-body text-sm text-foreground">Calories: <span className="font-pixel text-game-gold">{calories} kcal</span></p>
             <p className="font-body text-sm text-game-gold">+{coins}G earned!</p>
+            <p className="font-pixel text-sm text-accent game-text-shadow pt-1">🔥 {currentStreak}-day streak!</p>
           </div>
           <div className="flex flex-col gap-3">
             <Button onClick={() => navigate('/')} className="w-full h-12 font-pixel text-xs bg-primary text-primary-foreground hover:bg-primary/90">🏠 Home</Button>
@@ -350,6 +374,11 @@ export default function Battle() {
         <span className="font-pixel text-xs text-foreground game-text-shadow whitespace-nowrap">
           REP:{String(displayState.repCount).padStart(3, '0')}
         </span>
+        {currentStreak > 0 && (
+          <span className="font-pixel text-[9px] text-accent game-text-shadow whitespace-nowrap block mt-0.5">
+            🔥 {currentStreak}d streak
+          </span>
+        )}
       </div>
 
       <div className="absolute top-[11vh] left-1/2 -translate-x-1/2 z-40 w-[min(82vw,24rem)] px-2">

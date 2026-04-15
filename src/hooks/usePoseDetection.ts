@@ -12,18 +12,21 @@ import { PoseLandmarker, FilesetResolver } from '@mediapipe/tasks-vision';
  */
 const CORE_VISIBILITY_THRESHOLD = 0.5;
 
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
+
 /**
  * EMA blending factor for landmark smoothing.
  * 0 = frozen (never updates), 1 = no smoothing.
- * 0.35 gives ~3-frame lag which removes jitter without losing responsiveness.
+ * Android gets a higher value (less smoothing) for faster response at the
+ * cost of slightly more jitter — the tradeoff feels much better in practice.
  */
-const LANDMARK_SMOOTHING = 0.35;
+const LANDMARK_SMOOTHING = IS_ANDROID ? 0.6 : 0.35;
 
 /**
  * Consecutive frames without a stable core pose before we clear stale landmarks.
- * 8 frames ≈ 130 ms at 60 fps — short enough to feel responsive.
+ * Android uses fewer frames so stale pose clears faster.
  */
-const MAX_UNSTABLE_FRAMES = 8;
+const MAX_UNSTABLE_FRAMES = IS_ANDROID ? 4 : 8;
 
 type CameraStatus =
   | 'idle'
@@ -186,18 +189,18 @@ export function usePoseDetection() {
       videoRef.current = video;
 
       // ── getUserMedia ────────────────────────────────────────────────────
-      // Only constrain facingMode.
+      // iOS: only constrain facingMode — adding width/height triggers
+      // OverconstrainedError on some iOS versions and is ignored anyway.
       //
-      // Specifying width + height + aspectRatio simultaneously creates
-      // conflicting constraints that trigger OverconstrainedError on some iOS
-      // versions.  Even when they don't error, iOS often ignores them and
-      // delivers a 1280×720 landscape frame anyway.
-      //
-      // We accept whatever resolution the OS chooses and adapt in the
-      // detection pipeline (getVerticalAxis in exercise-detection.ts handles
-      // both landscape and portrait frame orientations).
+      // Android: request 640×480 to reduce frame size and cut MediaPipe
+      // processing time roughly in half vs the default 1280×720.
+      const videoConstraints: MediaTrackConstraints = { facingMode: 'user' };
+      if (IS_ANDROID) {
+        videoConstraints.width  = { ideal: 640 };
+        videoConstraints.height = { ideal: 480 };
+      }
       const cameraStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+        video: videoConstraints,
         audio: false,
       });
 
