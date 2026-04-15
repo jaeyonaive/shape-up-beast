@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import titleBg from '@/assets/title-screen-bg.png';
 import { startBgMusic } from '@/lib/bgMusic';
+import { StatsOverlay } from '@/components/StatsOverlay';
 
 export default function Home() {
   const navigate = useNavigate();
+  const [showStats, setShowStats] = useState(false);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-black">
@@ -33,6 +36,17 @@ export default function Home() {
         className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 w-[42vw] h-[7vh] z-10 active:scale-95 transition-transform duration-150 rounded-full"
         aria-label="Start Game"
       />
+
+      {/* Stats button — bottom-right corner, unobtrusive */}
+      <button
+        onClick={() => setShowStats(true)}
+        className="absolute bottom-4 right-4 z-10 font-pixel text-[9px] text-white/60 hover:text-white/90 active:scale-95 transition-all"
+        aria-label="View Stats"
+      >
+        📊 STATS
+      </button>
+
+      {showStats && <StatsOverlay onClose={() => setShowStats(false)} />}
     </div>
   );
 }
