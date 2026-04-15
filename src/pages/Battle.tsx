@@ -17,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import battleBgForest from '@/assets/gameplay-custom-bg.jpg';
 import { startBgMusic, stopBgMusic } from '@/lib/bgMusic';
+import { trackSession } from '@/lib/supabase';
 
 export default function Battle() {
   const navigate = useNavigate();
@@ -249,6 +250,7 @@ export default function Battle() {
     if (score > state.highScore) state.highScore = score;
     if (bestComboRef.current > state.bestStreak) state.bestStreak = bestComboRef.current;
     saveGameState(state);
+    trackSession(); // fire-and-forget — never blocks or throws
   }, [coins, calories, score, totalReps, stopCamera]);
 
   const [showInstructions, setShowInstructions] = useState(true);
