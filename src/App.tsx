@@ -11,13 +11,17 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 
 const queryClient = new QueryClient();
 
+// GitHub Pages project pages are served from /shape-up-beast/; all other hosts
+// (Netlify, Vercel, custom domains) serve from root.
+const BASENAME = window.location.pathname.startsWith('/shape-up-beast') ? '/shape-up-beast' : '';
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+        <BrowserRouter basename={BASENAME}>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/tutorial" element={<Tutorial />} />

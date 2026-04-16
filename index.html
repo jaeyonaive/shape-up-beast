@@ -3,23 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <script>
-      // GitHub Pages SPA routing: decode the path redirect from 404.html
       (function() {
-        var redirect = sessionStorage.redirect;
-        delete sessionStorage.redirect;
-        if (redirect && redirect !== location.href) {
-          history.replaceState(null, null, redirect);
+        // On root deployments (Netlify, Vercel, etc.) inject <base href="/"> so that
+        // relative asset paths (./assets/...) resolve correctly when the SPA rewrite
+        // serves this file for deep routes like /battle/monster1.
+        // GitHub Pages project pages always serve index.html from /shape-up-beast/,
+        // so the relative paths already resolve correctly without a <base> override.
+        if (!location.hostname.endsWith('github.io')) {
+          var b = document.createElement('base');
+          b.href = '/';
+          document.head.insertBefore(b, document.currentScript);
         }
-        // Decode query-param style redirect used by 404.html
+        // GitHub Pages 404.html redirect: /?/path → real path
         var l = window.location;
         if (l.search[1] === '/') {
-          var decoded = l.search.slice(1).split('&').map(function(s) {
+          var parts = l.search.slice(1).split('&').map(function(s) {
             return s.replace(/~and~/g, '&');
           });
-          history.replaceState(
-            null, null,
-            l.pathname.slice(0, -1) + decoded[0] +
-            (decoded[1] ? '?' + decoded[1] : '') + l.hash
+          history.replaceState(null, null,
+            l.pathname.replace(/\/$/, '') + parts[0] +
+            (parts[1] ? '?' + parts[1] : '') + l.hash
           );
         }
       })();
