@@ -2,6 +2,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+console.log("App started");
+
 try {
   const root = document.getElementById("root");
   if (!root) throw new Error("#root element not found in index.html");
