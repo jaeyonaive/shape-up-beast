@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function() {
+        // On root deployments (Netlify, Vercel, etc.) inject <base href="/"> so that
+        // relative asset paths (./assets/...) resolve correctly when the SPA rewrite
+        // serves this file for deep routes like /battle/monster1.
+        // GitHub Pages project pages always serve index.html from /shape-up-beast/,
+        // so the relative paths already resolve correctly without a <base> override.
+        if (!location.hostname.endsWith('github.io')) {
+          var b = document.createElement('base');
+          b.href = '/';
+          document.head.insertBefore(b, document.currentScript);
+        }
+        // GitHub Pages 404.html redirect: /?/path → real path
+        var l = window.location;
+        if (l.search[1] === '/') {
+          var parts = l.search.slice(1).split('&').map(function(s) {
+            return s.replace(/~and~/g, '&');
+          });
+          history.replaceState(null, null,
+            l.pathname.replace(/\/$/, '') + parts[0] +
+            (parts[1] ? '?' + parts[1] : '') + l.hash
+          );
+        }
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>FitMon - AR Fitness Monster Battle</title>
+    <meta name="description" content="FitMon - Battle monsters with fitness! Camera-based pose detection exercise game." />
+    <meta name="author" content="Lovable" />
+
+    <meta property="og:title" content="FitMon - AR Fitness Monster Battle" />
+    <meta property="og:description" content="Battle monsters with fitness! Camera-based pose detection exercise game." />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@Lovable" />
+    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <script type="module" crossorigin src="./assets/index-DK6F1sSP.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CF159iyn.css">
+  </head>
+
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
